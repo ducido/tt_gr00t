@@ -7,7 +7,7 @@ PROJECT_REPO="$SCRIPT_DIR/../../../.."
 ROBOCASA_REPO="$PROJECT_REPO/external_dependencies/robocasa"
 UV_ENV="$SCRIPT_DIR/robocasa_uv"
 
-git submodule update --init $ROBOCASA_REPO
+# git submodule update --init $ROBOCASA_REPO
 
 # Build helpers
 # python -m pip install cmake==3.18.4

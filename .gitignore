@@ -178,6 +178,6 @@ external_dependencies/LIBERO/*
 external_dependencies/robocasa/*
 external_dependencies/robocasa-gr1-tabletop-tasks/*
 external_dependencies/SimplerEnv/*
-
+external_dependencies
 
 
