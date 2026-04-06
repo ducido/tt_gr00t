@@ -292,6 +292,7 @@ class Gr00tN1d6ActionHead(nn.Module):
         state_features: torch.Tensor,
         embodiment_id: torch.Tensor,
         backbone_output: BatchFeature,
+        sigma: float,
     ) -> BatchFeature:
         """
         Generate actions using the flow matching diffusion process.
@@ -307,7 +308,8 @@ class Gr00tN1d6ActionHead(nn.Module):
         # Set initial actions as the sampled noise.
         batch_size = vl_embeds.shape[0]
         device = vl_embeds.device
-        actions = torch.randn(
+        print("sigma:", sigma)
+        actions = sigma * torch.randn(
             size=(batch_size, self.config.action_horizon, self.action_dim),
             dtype=vl_embeds.dtype,
             device=device,
@@ -364,7 +366,7 @@ class Gr00tN1d6ActionHead(nn.Module):
         )
 
     @torch.no_grad()
-    def get_action(self, backbone_output: BatchFeature, action_input: BatchFeature) -> BatchFeature:
+    def get_action(self, backbone_output: BatchFeature, action_input: BatchFeature, sigma: float) -> BatchFeature:
         """
         Generate actions using the flow matching diffusion process.
 
@@ -386,6 +388,7 @@ class Gr00tN1d6ActionHead(nn.Module):
             state_features=features.state_features,
             embodiment_id=action_input.embodiment_id,
             backbone_output=backbone_output,
+            sigma=sigma
         )
 
     @property
@@ -512,7 +515,7 @@ class Gr00tN1d6(PreTrainedModel):
 
         return action_outputs
 
-    def get_action(self, inputs: dict) -> BatchFeature:
+    def get_action(self, inputs: dict, sigma: float) -> BatchFeature:
         """
         Generate actions using the complete model.
         """
@@ -521,7 +524,7 @@ class Gr00tN1d6(PreTrainedModel):
 
         # Forward through backbone
         backbone_outputs = self.backbone(backbone_inputs)
-        action_outputs = self.action_head.get_action(backbone_outputs, action_inputs)
+        action_outputs = self.action_head.get_action(backbone_outputs, action_inputs, sigma)
 
         return action_outputs
 

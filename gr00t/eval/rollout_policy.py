@@ -239,6 +239,7 @@ def run_rollout_gymnasium_policy(
     wrapper_configs: WrapperConfigs,
     n_episodes: int = 10,
     n_envs: int = 1,
+    sigma: float = 1.0
 ) -> Any:
     """Run policy rollouts in parallel environments.
 
@@ -292,7 +293,7 @@ def run_rollout_gymnasium_policy(
 
     pbar = tqdm(total=n_episodes, desc="Episodes")
     while completed_episodes < n_episodes:
-        actions, _ = policy.get_action(observations)
+        actions, _ = policy.get_action(observations, sigma)
         next_obs, rewards, terminations, truncations, env_infos = env.step(actions)
         # NOTE (FY): Currently we don't properly handle policy reset. For now, our policy are stateless,
         # but in the future if we need policy to be stateful, we need to detect env reset and call policy.reset()
@@ -416,6 +417,7 @@ def run_gr00t_sim_policy(
     policy_client_port: int | None = None,
     n_envs: int = 8,
     n_action_steps: int = 8,
+    sigma: float = 1.0
 ):
     embodiment_tag = get_embodiment_tag_from_env_name(env_name)
 
@@ -441,12 +443,14 @@ def run_gr00t_sim_policy(
         model_path, embodiment_tag, policy_client_host, policy_client_port
     )
 
+
     results = run_rollout_gymnasium_policy(
         env_name=env_name,
         policy=policy,
         wrapper_configs=wrapper_configs,
         n_episodes=n_episodes,
         n_envs=n_envs,
+        sigma=sigma,
     )
     print("Video saved to: ", wrapper_configs.video.video_dir)
     return results
@@ -470,6 +474,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--n_envs", type=int, default=8)
     parser.add_argument("--n_action_steps", type=int, default=8)
+    parser.add_argument("--sigma", type=float, default=1.0)
 
     args = parser.parse_args()
 
@@ -492,6 +497,7 @@ if __name__ == "__main__":
         policy_client_port=args.policy_client_port,
         n_envs=args.n_envs,
         n_action_steps=args.n_action_steps,
+        sigma=args.sigma,
     )
     print("results: ", results)
     print("success rate: ", np.mean(results[1]))
