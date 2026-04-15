@@ -338,6 +338,10 @@ class Gr00tPolicy(BasePolicy):
         collated_inputs = self.collate_fn(processed_inputs)
         collated_inputs = _rec_to_dtype(collated_inputs, dtype=torch.bfloat16)
 
+        ###### update all keys in options to collated_inputs
+        for k, v in options.items():
+            collated_inputs[k] = v
+        ######
         # Step 4: Run model inference to predict actions
         with torch.inference_mode():
             model_pred = self.model.get_action(**collated_inputs)
