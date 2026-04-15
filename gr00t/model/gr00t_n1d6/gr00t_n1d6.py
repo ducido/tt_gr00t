@@ -357,6 +357,8 @@ class Gr00tN1d6ActionHead(nn.Module):
 
             # Update actions using euler integration.
             actions = actions + dt * pred_velocity
+        print(actions.shape)
+        atv, jerk = compute_atv(actions), compute_jerk(actions)
         return BatchFeature(
             data={
                 "action_pred": actions,

@@ -1,3 +1,5 @@
+source .venv/bin/activate
+which python
 TASKS=(
   robocasa_panda_omron/OpenDrawer_PandaOmron_Env
   # robocasa_panda_omron/CloseSingleDoor_PandaOmron_Env
@@ -24,8 +26,7 @@ for TASK in "${TASKS[@]}"; do
       --env_name "$TASK" \
       --n_action_steps 8 \
       --n_envs 5 \
-      --sigma 1.0
-      > "$LOG_DIR/${NAME}.txt" 2>&1
+      --sigma 1.0 # > "$LOG_DIR/${NAME}.txt" 2>&1
 
   echo "Finished task: $TASK"
   echo ""

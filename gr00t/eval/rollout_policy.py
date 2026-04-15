@@ -232,6 +232,16 @@ def create_eval_env(
     )
     return env
 
+def compute_atv(actions):
+    diff = np.abs(actions[1:] - actions[:-1])
+    return diff.mean()
+
+def compute_jerk(actions):
+    v = actions[1:] - actions[:-1]
+    a = v[1:] - v[:-1]
+    jerk = a[1:] - a[:-1]
+    return np.sqrt((jerk**2).mean())
+
 
 def run_rollout_gymnasium_policy(
     env_name: str,
@@ -293,7 +303,9 @@ def run_rollout_gymnasium_policy(
 
     pbar = tqdm(total=n_episodes, desc="Episodes")
     while completed_episodes < n_episodes:
-        actions, _ = policy.get_action(observations, sigma)
+        actions, _ = policy.get_action(observations, options={'sigma': sigma})
+        
+        print(f"ATV: {atv}, JERK: {jerk}")
         next_obs, rewards, terminations, truncations, env_infos = env.step(actions)
         # NOTE (FY): Currently we don't properly handle policy reset. For now, our policy are stateless,
         # but in the future if we need policy to be stateful, we need to detect env reset and call policy.reset()
