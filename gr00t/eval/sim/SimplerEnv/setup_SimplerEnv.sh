@@ -6,7 +6,7 @@ PROJECT_REPO="$SCRIPT_DIR/../../../.."
 SIMPLER_REPO="$PROJECT_REPO/external_dependencies/SimplerEnv"
 UV_ENV="$SCRIPT_DIR/simpler_uv"
 
-git submodule update --init --recursive $SIMPLER_REPO
+# git submodule update --init --recursive $SIMPLER_REPO
 
 # Numpy pin: cluster uses 1.26.4; SimplerEnv README mentions 1.24.4 for pinocchio IK.
 # Override by exporting SIMPLER_NUMPY=1.24.4 if needed.
