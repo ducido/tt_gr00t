@@ -357,8 +357,8 @@ class Gr00tN1d6ActionHead(nn.Module):
 
             # Update actions using euler integration.
             actions = actions + dt * pred_velocity
-        print(actions.shape)
-        atv, jerk = compute_atv(actions), compute_jerk(actions)
+        # print(actions.shape)
+        # atv, jerk = compute_atv(actions), compute_jerk(actions)
         return BatchFeature(
             data={
                 "action_pred": actions,
@@ -542,3 +542,14 @@ class Gr00tN1d6(PreTrainedModel):
 # Register the model with HuggingFace
 AutoConfig.register("Gr00tN1d6", Gr00tN1d6Config)
 AutoModel.register(Gr00tN1d6Config, Gr00tN1d6)
+
+import numpy as np
+def compute_atv(actions):
+    diff = np.abs(actions[1:] - actions[:-1])
+    return diff.mean()
+
+def compute_jerk(actions):
+    v = actions[1:] - actions[:-1]
+    a = v[1:] - v[:-1]
+    jerk = a[1:] - a[:-1]
+    return np.sqrt((jerk**2).mean())
