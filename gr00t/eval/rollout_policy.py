@@ -250,8 +250,8 @@ def run_rollout_gymnasium_policy(
     wrapper_configs: WrapperConfigs,
     n_episodes: int = 10,
     n_envs: int = 1,
-    sigma: float = 1.0,
-    knn_k: int | None = None
+    knn_k: int | None = None,
+    contrast_config: dict | None = None,
 ) -> Any:
     """Run policy rollouts in parallel environments.
 
@@ -298,6 +298,12 @@ def run_rollout_gymnasium_policy(
     episode_successes = []
     episode_infos = defaultdict(list)
 
+    #######
+    if knn_k:
+        config['env'] = env
+        contrast_image_generator = get_contrast_image_generator(config)
+    #######
+
     # Initial reset
     observations, _ = env.reset()
     policy.reset()
@@ -306,7 +312,6 @@ def run_rollout_gymnasium_policy(
     pbar = tqdm(total=n_episodes, desc="Episodes")
     while completed_episodes < n_episodes:
         if knn_k:
-            
             contrast_image = observations['video.image_0']
 
             contrast_observations = {k:v for k, v in observations.items()}
@@ -442,8 +447,8 @@ def run_gr00t_sim_policy(
     policy_client_port: int | None = None,
     n_envs: int = 8,
     n_action_steps: int = 8,
-    sigma: float = 1.0,
-    knn_k: int | None = None
+    knn_k: int | None = None,
+    contrast_config: dict | None = None,
 ):
     embodiment_tag = get_embodiment_tag_from_env_name(env_name)
 
@@ -476,8 +481,8 @@ def run_gr00t_sim_policy(
         wrapper_configs=wrapper_configs,
         n_episodes=n_episodes,
         n_envs=n_envs,
-        sigma=sigma,
-        knn_k=knn_k
+        knn_k=knn_k,
+        contrast_config=contrast_config,
     )
     print("Video saved to: ", wrapper_configs.video.video_dir)
     return results
@@ -501,8 +506,9 @@ if __name__ == "__main__":
     )
     parser.add_argument("--n_envs", type=int, default=8)
     parser.add_argument("--n_action_steps", type=int, default=20)
-    parser.add_argument("--sigma", type=float, default=1.0)
     parser.add_argument("--knn_k", type=int, default=None)
+    parser.add_argument("--search_opts", nargs="+", default=[])
+
 
     args = parser.parse_args()
 
@@ -517,7 +523,50 @@ if __name__ == "__main__":
     )
 
     ### build contrast image generator
-    # contrast_image_generator = get_contrast_image_generator(config)
+    if args.knn_k:
+        import sys
+        sys.path.append('/projects/extern/kisski/kisski-spath/dir.project/VLA_Imit/Isaac-GR00T')
+        from contrast_utils import get_contrast_image_generator
+        import re 
+
+        CONTRAST_IMAGE_CONFIG = dict(
+            camera_name=None,
+            by="gt",
+            inpaint_mode="lama",
+            color="auto",
+            sigma=5,
+            version=2,
+            get_all_parts=False,
+        )
+        def parse_opts(opts):
+            if len(opts) == 0:
+                return dict()
+            # [a, b, c, d] -> {a: b, c: d}
+            return {opts[i]: parse_value(opts[i+1]) for i in range(0, len(opts), 2)}
+
+        def parse_value(value):
+            # parse value from string to list/int/float/bool
+            if isinstance(value, str) and ',' in value:
+                return [parse_value(v) for v in value.split(',')]
+            if re.match(r'^-?\d+$', value):
+                return int(value)
+            if re.match(r'^-?\d+\.\d+$', value):
+                return float(value)
+            if value == 'True' or value == 'False':
+                return value == 'True'
+            return value
+            
+        def get_contrast_image_generator_config(opts):
+            opts = parse_opts(opts)
+            config = CONTRAST_IMAGE_CONFIG
+            for k, v in opts.items():
+                if k in config:
+                    config[k] = v
+            return config
+
+        config = get_contrast_image_generator_config(args.search_opts)
+        # config['env'] = env
+        # contrast_image_generator = get_contrast_image_generator(config)
     ###
 
     results = run_gr00t_sim_policy(
@@ -529,8 +578,8 @@ if __name__ == "__main__":
         policy_client_port=args.policy_client_port,
         n_envs=args.n_envs,
         n_action_steps=args.n_action_steps,
-        sigma=args.sigma,
         knn_k=args.knn_k,
+        contrast_config=config
     )
     print("results: ", results)
     print("success rate: ", np.mean(results[1]))

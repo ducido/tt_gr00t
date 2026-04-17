@@ -39,6 +39,9 @@ uv pip install --editable "$PROJECT_REPO" --no-deps
 
 uv pip install tianshou==0.5.1 pydantic av zmq torchvision==0.22.0 transformers==4.51.3
 
+# To run contrast generator
+uv pip install omegaconf albumentations==0.5.2 webdataset scikit-image easydict scikit-learn pandas lightning kornia
+uv pip install -r third_party/inpaint_anything/lama/requirements.txt
 # Sanity check
 python - <<'PY'
 from gr00t.eval.sim.SimplerEnv.simpler_env import register_simpler_envs
