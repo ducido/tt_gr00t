@@ -9,10 +9,10 @@ TASKS=(
 )
 
 knn_k=5
-search_opts="by grounded_sam_tracking alpha 0.2 num_repeats 48 knn_k 5"
+search_opts="by grounded_sam_tracking alpha 0.2 num_repeats 24 knn_k 5"
 
 
-LOG_DIR="eval_logs/debug_knn_${knn_k}"
+LOG_DIR="eval_logs/debug_knn_add_contrast_${knn_k}"
 mkdir -p "$LOG_DIR"
 
 for TASK in "${TASKS[@]}"; do
@@ -29,9 +29,8 @@ for TASK in "${TASKS[@]}"; do
         --max_episode_steps=300 \
         --env_name "$TASK" \
         --n_action_steps 4 \
-        --n_envs 5
-        #  \
-        # > "$LOG_DIR/${NAME}.txt" 2>&1
+        --n_envs 5 \
+        > "$LOG_DIR/${NAME}.txt" 2>&1
 
     echo "Finished task: $TASK"
     echo ""

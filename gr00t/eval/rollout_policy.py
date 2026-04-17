@@ -6,6 +6,7 @@ from pathlib import Path
 import time
 from typing import Any
 import uuid
+import copy
 
 from gr00t.data.embodiment_tags import EmbodimentTag
 from gr00t.eval.sim.env_utils import get_embodiment_tag_from_env_name
@@ -305,17 +306,24 @@ def run_rollout_gymnasium_policy(
     #######
 
     # Initial reset
-    observations, _ = env.reset()
+    observations, _ = env.reset() # odict_keys(['annotation.human.action.task_description', 'state.gripper', 'state.pad', 'state.pitch', 'state.roll', 'state.x', 'state.y', 'state.yaw', 'state.z', 'video.image_0'])
+    observations_copy = copy.deepcopy(observations)
+    contrast_image_generator.reset()
     policy.reset()
     i = 0
 
     pbar = tqdm(total=n_episodes, desc="Episodes")
     while completed_episodes < n_episodes:
         if knn_k:
-            contrast_image = observations['video.image_0']
+            all_contrast_images = []
+            for i in range(len(observations['video.image_0'])):
+                observations['video.single_image_0'] = observations['video.image_0'][i]
+                contrast_image = contrast_image_generator.generate(observations, observations['annotation.human.action.task_description'][0])
+                all_contrast_images.append(contrast_image)
+            all_contrast_images = np.stack(all_contrast_images)[:,None,:,:,:]
 
             contrast_observations = {k:v for k, v in observations.items()}
-            contrast_observations['video.image_0'] = contrast_image
+            contrast_observations['video.image_0'] = all_contrast_images
             actions, _ = policy.get_action(observations, options={'knn_k': knn_k, 'contrast_inputs': contrast_observations})
         else:
             actions, _ = policy.get_action(observations, options={})

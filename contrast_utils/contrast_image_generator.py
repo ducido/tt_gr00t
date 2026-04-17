@@ -274,7 +274,7 @@ class ContrastImageGenerator:
         return mask
     
     def _get_rgb_image(self, obs):
-        image = self._get_camera_images(obs)['rgb']
+        image = self._get_camera_images(obs)
         if isinstance(image, torch.Tensor):
             image = image.cpu().numpy()
         if len(image.shape) == 4 and image.shape[0] == 1:
@@ -291,23 +291,26 @@ class ContrastImageGenerator:
             seg = seg.cpu().numpy()
         return seg
 
+    # def _get_camera_images(self, obs):
+    #     robot = self.env.unwrapped.robot_uid if self.version == 2 else self.env.unwrapped.robot_uids
+    #     if not isinstance(robot, list):
+    #         robot = ''.join(robot)
+        
+    #     camera_name = self.camera_name
+    #     if camera_name is None:
+    #         if "google_robot" in robot:
+    #             camera_name = "overhead_camera"
+    #         elif "widowx" in robot:
+    #             camera_name = "3rd_view_camera"
+    #         elif "panda" in robot:
+    #             camera_name = "base_camera"
+    #         elif "panda_wristcam" in robot:
+    #             camera_name = "base_camera"
+    #         else:
+    #             raise NotImplementedError()
+        
+    #     key = "image" if self.version == 2 else "sensor_data"
+    #     return obs[key][camera_name]
+
     def _get_camera_images(self, obs):
-        robot = self.env.unwrapped.robot_uid if self.version == 2 else self.env.unwrapped.robot_uids
-        if not isinstance(robot, list):
-            robot = ''.join(robot)
-        
-        camera_name = self.camera_name
-        if camera_name is None:
-            if "google_robot" in robot:
-                camera_name = "overhead_camera"
-            elif "widowx" in robot:
-                camera_name = "3rd_view_camera"
-            elif "panda" in robot:
-                camera_name = "base_camera"
-            elif "panda_wristcam" in robot:
-                camera_name = "base_camera"
-            else:
-                raise NotImplementedError()
-        
-        key = "image" if self.version == 2 else "sensor_data"
-        return obs[key][camera_name]
+        return obs['video.single_image_0']
