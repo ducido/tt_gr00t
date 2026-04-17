@@ -488,7 +488,7 @@ if __name__ == "__main__":
         default="gr1_unified/PosttrainPnPNovelFromPlateToBowlSplitA_GR1ArmsAndWaistFourierHands_Env",
     )
     parser.add_argument("--n_envs", type=int, default=8)
-    parser.add_argument("--n_action_steps", type=int, default=8)
+    parser.add_argument("--n_action_steps", type=int, default=20)
     parser.add_argument("--sigma", type=float, default=1.0)
 
     args = parser.parse_args()
