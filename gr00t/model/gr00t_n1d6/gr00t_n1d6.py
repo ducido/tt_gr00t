@@ -292,7 +292,6 @@ class Gr00tN1d6ActionHead(nn.Module):
         state_features: torch.Tensor,
         embodiment_id: torch.Tensor,
         backbone_output: BatchFeature,
-        sigma: float,
     ) -> BatchFeature:
         """
         Generate actions using the flow matching diffusion process.
@@ -308,8 +307,7 @@ class Gr00tN1d6ActionHead(nn.Module):
         # Set initial actions as the sampled noise.
         batch_size = vl_embeds.shape[0]
         device = vl_embeds.device
-        print("sigma:", sigma)
-        actions = sigma * torch.randn(
+        actions = torch.randn(
             size=(batch_size, self.config.action_horizon, self.action_dim),
             dtype=vl_embeds.dtype,
             device=device,
@@ -368,7 +366,7 @@ class Gr00tN1d6ActionHead(nn.Module):
         )
 
     @torch.no_grad()
-    def get_action(self, backbone_output: BatchFeature, action_input: BatchFeature, sigma: float) -> BatchFeature:
+    def get_action(self, backbone_output: BatchFeature, action_input: BatchFeature) -> BatchFeature:
         """
         Generate actions using the flow matching diffusion process.
 
@@ -390,7 +388,6 @@ class Gr00tN1d6ActionHead(nn.Module):
             state_features=features.state_features,
             embodiment_id=action_input.embodiment_id,
             backbone_output=backbone_output,
-            sigma=sigma
         )
 
     @property
@@ -517,18 +514,70 @@ class Gr00tN1d6(PreTrainedModel):
 
         return action_outputs
 
-    def get_action(self, inputs: dict, sigma: float) -> BatchFeature:
+    def get_action(self, inputs: dict) -> BatchFeature:
         """
         Generate actions using the complete model.
         """
         # Prepare inputs for backbone and action head
+        print("Baseline Rollout")
+        # print(inputs.keys()) # dict_keys(['state', 'embodiment_id', 'input_ids', 'attention_mask', 'pixel_values', 'image_sizes'])
         backbone_inputs, action_inputs = self.prepare_input(inputs)
+
+        # backbone_inputs: dict_keys(['state', 'embodiment_id', 'input_ids', 'attention_mask', 'pixel_values', 'image_sizes'])
+        # action_inputs: dict_keys(['state', 'embodiment_id', 'input_ids', 'attention_mask', 'pixel_values', 'image_sizes'])
 
         # Forward through backbone
         backbone_outputs = self.backbone(backbone_inputs)
-        action_outputs = self.action_head.get_action(backbone_outputs, action_inputs, sigma)
+
+        '''
+        backbone_outputs: dict_keys(['backbone_features', 'backbone_attention_mask', 'image_mask'])
+        - backbone_features: torch.Size([5, 108, 2048])
+        - backbone_attention_mask: torch.Size([5, 108])
+        - image_mask: torch.Size([5, 108])
+        '''
+
+        action_outputs = self.action_head.get_action(backbone_outputs, action_inputs)
+        '''
+        action_outputs: dict_keys(['action_pred', 'backbone_features', 'state_features'])
+        - action_pred: torch.Size([5, 50, 128])
+        - backbone_features: torch.Size([5, 108, 2048])
+        - state_features: torch.Size([5, 1, 1536])
+        '''
 
         return action_outputs
+
+    def knn_get_action(self, inputs: dict, contrast_inputs: dict, knn_k: int) -> BatchFeature:
+        """
+        Generate actions using the complete model.
+        """
+        # Prepare inputs for backbone and action head
+        print(f"Best-of-N KNN k = {knn_k}")
+        
+        backbone_inputs, action_inputs = self.prepare_input(inputs)
+        contrast_backbone_inputs, contrast_action_inputs = self.prepare_input(contrast_inputs)
+
+        # Forward through backbone
+        backbone_outputs = self.backbone(backbone_inputs)
+        contrast_backbone_outputs = self.backbone(contrast_backbone_inputs)
+
+        # concat dim=0 backbone_outputs
+        for k in backbone_outputs.keys():
+            backbone_outputs[k] = torch.cat([backbone_outputs[k], contrast_backbone_outputs[k]], dim=0)
+
+        for k in action_inputs.keys():
+            if k != 'pixel_values':
+                action_inputs[k] = torch.cat([action_inputs[k], contrast_action_inputs[k]], dim=0)
+            else:
+                action_inputs[k] = action_inputs[k] + contrast_action_inputs[k]
+
+        action_outputs = self.action_head.get_action(backbone_outputs, action_inputs)
+
+        raw_action_outputs = {}
+        contrast_action_outputs = {}
+        for k in action_outputs.keys():
+            raw_action_outputs[k], contrast_action_outputs[k] = torch.chunk(action_outputs[k], 2, dim=0)   
+
+        return raw_action_outputs
 
     @property
     def device(self):

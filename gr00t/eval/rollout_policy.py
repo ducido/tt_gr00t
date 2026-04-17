@@ -14,6 +14,7 @@ from gr00t.policy import BasePolicy
 import gymnasium as gym
 import numpy as np
 from tqdm import tqdm
+import torch
 
 
 @dataclass
@@ -249,7 +250,8 @@ def run_rollout_gymnasium_policy(
     wrapper_configs: WrapperConfigs,
     n_episodes: int = 10,
     n_envs: int = 1,
-    sigma: float = 1.0
+    sigma: float = 1.0,
+    knn_k: int | None = None
 ) -> Any:
     """Run policy rollouts in parallel environments.
 
@@ -303,7 +305,15 @@ def run_rollout_gymnasium_policy(
 
     pbar = tqdm(total=n_episodes, desc="Episodes")
     while completed_episodes < n_episodes:
-        actions, _ = policy.get_action(observations, options={'sigma': sigma})
+        if knn_k:
+            
+            contrast_image = observations['video.image_0']
+
+            contrast_observations = {k:v for k, v in observations.items()}
+            contrast_observations['video.image_0'] = contrast_image
+            actions, _ = policy.get_action(observations, options={'knn_k': knn_k, 'contrast_inputs': contrast_observations})
+        else:
+            actions, _ = policy.get_action(observations, options={})
         # print(actions.keys()) # dict_keys(['action.x', 'action.y', 'action.z', 'action.roll', 'action.pitch', 'action.yaw', 'action.gripper'])
         # breakpoint()
         # atv = compute_atv(actions)
@@ -432,7 +442,8 @@ def run_gr00t_sim_policy(
     policy_client_port: int | None = None,
     n_envs: int = 8,
     n_action_steps: int = 8,
-    sigma: float = 1.0
+    sigma: float = 1.0,
+    knn_k: int | None = None
 ):
     embodiment_tag = get_embodiment_tag_from_env_name(env_name)
 
@@ -466,6 +477,7 @@ def run_gr00t_sim_policy(
         n_episodes=n_episodes,
         n_envs=n_envs,
         sigma=sigma,
+        knn_k=knn_k
     )
     print("Video saved to: ", wrapper_configs.video.video_dir)
     return results
@@ -490,6 +502,7 @@ if __name__ == "__main__":
     parser.add_argument("--n_envs", type=int, default=8)
     parser.add_argument("--n_action_steps", type=int, default=20)
     parser.add_argument("--sigma", type=float, default=1.0)
+    parser.add_argument("--knn_k", type=int, default=None)
 
     args = parser.parse_args()
 
@@ -503,6 +516,10 @@ if __name__ == "__main__":
         '  - To use model path: set --model_path, and set --policy_client_host "" (and leave --policy_client_port unset)'
     )
 
+    ### build contrast image generator
+    # contrast_image_generator = get_contrast_image_generator(config)
+    ###
+
     results = run_gr00t_sim_policy(
         env_name=args.env_name,
         n_episodes=args.n_episodes,
@@ -513,6 +530,7 @@ if __name__ == "__main__":
         n_envs=args.n_envs,
         n_action_steps=args.n_action_steps,
         sigma=args.sigma,
+        knn_k=args.knn_k,
     )
     print("results: ", results)
     print("success rate: ", np.mean(results[1]))

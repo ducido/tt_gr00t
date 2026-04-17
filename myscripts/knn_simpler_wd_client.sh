@@ -1,16 +1,17 @@
 
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=3
 
 TASKS=(
-  simpler_env_widowx/widowx_carrot_on_plate
-#   simpler_env_widowx/widowx_put_eggplant_in_basket
-#   simpler_env_widowx/widowx_spoon_on_towel
-#   simpler_env_widowx/widowx_stack_cube
+#   simpler_env_widowx/widowx_carrot_on_plate
+  simpler_env_widowx/widowx_put_eggplant_in_basket
+  simpler_env_widowx/widowx_spoon_on_towel
+  simpler_env_widowx/widowx_stack_cube
 )
 
+knn_k=5
 
 
-LOG_DIR="eval_logs/debug"
+LOG_DIR="eval_logs/debug_knn_${knn_k}_testcode"
 mkdir -p "$LOG_DIR"
 
 for TASK in "${TASKS[@]}"; do
@@ -19,6 +20,7 @@ for TASK in "${TASKS[@]}"; do
     echo "Running task: $TASK"
 
     gr00t/eval/sim/SimplerEnv/simpler_uv/.venv/bin/python gr00t/eval/rollout_policy.py \
+        --knn_k $knn_k \
         --n_episodes 50 \
         --policy_client_host 127.0.0.1 \
         --policy_client_port 5555 \

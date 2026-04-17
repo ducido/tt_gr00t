@@ -323,28 +323,39 @@ class Gr00tPolicy(BasePolicy):
             Tuple of (actions_dict, info_dict)
         """
         # Step 1: Split batched observation into individual observations
-        unbatched_observations = self._unbatch_observation(observation)
-        processed_inputs = []
+        def prepare_inputs(observ):
+            unbatched_observations = self._unbatch_observation(observ)
+            processed_inputs = []
 
-        # Step 2: Process each observation through the VLA processor
-        states = []
-        for obs in unbatched_observations:
-            vla_step_data = self._to_vla_step_data(obs)
-            states.append(vla_step_data.states)  # dict[str, np.ndarray[np.float32, (T, D)]]
-            messages = [{"type": MessageType.EPISODE_STEP.value, "content": vla_step_data}]
-            processed_inputs.append(self.processor(messages))
+            # Step 2: Process each observation through the VLA processor
+            states = []
+            for obs in unbatched_observations:
+                vla_step_data = self._to_vla_step_data(obs)
+                states.append(vla_step_data.states)  # dict[str, np.ndarray[np.float32, (T, D)]]
+                messages = [{"type": MessageType.EPISODE_STEP.value, "content": vla_step_data}]
+                processed_inputs.append(self.processor(messages))
 
-        # Step 3: Collate processed inputs into a single batch for model
-        collated_inputs = self.collate_fn(processed_inputs)
-        collated_inputs = _rec_to_dtype(collated_inputs, dtype=torch.bfloat16)
+            # Step 3: Collate processed inputs into a single batch for model
+            collated_inputs = self.collate_fn(processed_inputs)
+            collated_inputs = _rec_to_dtype(collated_inputs, dtype=torch.bfloat16)
+            return collated_inputs, states
+
+        collated_inputs, states = prepare_inputs(observation)
 
         ###### update all keys in options to collated_inputs
         for k, v in options.items():
             collated_inputs[k] = v
+            if k == 'contrast_inputs':
+                collated_inputs[k] = prepare_inputs(v)[0]['inputs']
         ######
+
+
         # Step 4: Run model inference to predict actions
         with torch.inference_mode():
-            model_pred = self.model.get_action(**collated_inputs)
+            if 'knn_k' in collated_inputs:
+                model_pred = self.model.knn_get_action(**collated_inputs)
+            else:
+                model_pred = self.model.get_action(**collated_inputs)
         normalized_action = model_pred["action_pred"].float()
 
         # Step 5: Decode actions from normalized space back to physical units
@@ -587,32 +598,37 @@ class Gr00tSimPolicyWrapper(PolicyWrapper):
             Tuple of (flat_actions_dict, info_dict)
         """
         # Transform flat observation format to nested format expected by Gr00tPolicy
-        new_obs = {}
-        for modality in ["video", "state", "language"]:
-            new_obs[modality] = {}
-            for key in self.policy.modality_configs[modality].modality_keys:
-                if modality == "language":
-                    # PATCH: Legacy compatibility for DC environments
-                    if key == "task" and "annotation.human.coarse_action" in observation:
-                        parsed_key = "annotation.human.coarse_action"
-                    # /PATCH
+        def create_new_obs(observ):
+            new_obs = {}
+            for modality in ["video", "state", "language"]:
+                new_obs[modality] = {}
+                for key in self.policy.modality_configs[modality].modality_keys:
+                    if modality == "language":
+                        # PATCH: Legacy compatibility for DC environments
+                        if key == "task" and "annotation.human.coarse_action" in observ:
+                            parsed_key = "annotation.human.coarse_action"
+                        # /PATCH
+                        else:
+                            parsed_key = key
                     else:
-                        parsed_key = key
-                else:
-                    # Construct flat key (e.g., 'video.camera' or 'state.joints')
-                    parsed_key = f"{modality}.{key}"
+                        # Construct flat key (e.g., 'video.camera' or 'state.joints')
+                        parsed_key = f"{modality}.{key}"
 
-                arr = observation[parsed_key]
+                    arr = observ[parsed_key]
 
-                # Transform to nested format
-                if modality == "language":
-                    # Convert from tuple[str] or list[str] (B,) to list[list[str]] (B, 1)
-                    # Each element becomes a list with one string for temporal dimension
-                    new_obs[modality][key] = [[str(item)] for item in arr]
-                else:
-                    # Video and state arrays are already in correct format (B, T, ...)
-                    new_obs[modality][key] = arr
+                    # Transform to nested format
+                    if modality == "language":
+                        # Convert from tuple[str] or list[str] (B,) to list[list[str]] (B, 1)
+                        # Each element becomes a list with one string for temporal dimension
+                        new_obs[modality][key] = [[str(item)] for item in arr]
+                    else:
+                        # Video and state arrays are already in correct format (B, T, ...)
+                        new_obs[modality][key] = arr
+            return new_obs
 
+        new_obs = create_new_obs(observation)
+        if 'contrast_inputs' in options:
+            options['contrast_inputs'] = create_new_obs(options['contrast_inputs'])
         # Compute actions using the underlying Gr00tPolicy
         action, info = self.policy.get_action(new_obs, options)
 
