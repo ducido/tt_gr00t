@@ -9,6 +9,7 @@ _INSTRUCTION_TEMPLATES = [
     r"place (.+) into (.+)",
     r"put (.+) into (.+)",
     r"put (.+) on (.+)",
+    r"put (.+) in (.+)",
     r"stack (.+) on (.+)",
 ]
 

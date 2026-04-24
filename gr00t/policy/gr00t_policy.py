@@ -362,9 +362,14 @@ class Gr00tPolicy(BasePolicy):
         batched_states = {}
         for k in self.modality_configs["state"].modality_keys:
             batched_states[k] = np.stack([s[k] for s in states], axis=0)  # (B, T, D)
+
         unnormalized_action = self.processor.decode_action(
-            normalized_action.cpu().numpy(), self.embodiment_tag, batched_states
+            normalized_action.cpu().numpy(), self.embodiment_tag, batched_states, n_action_steps=options.get('n_action_steps')
         )
+
+        # print(unnormalized_action.keys())
+        # print(unnormalized_action['x'].shape)
+        # breakpoint()
 
         # Cast all actions to float32 for consistency
         casted_action = {
@@ -412,10 +417,10 @@ class Gr00tPolicy(BasePolicy):
                 f"Action key '{action_key}' must be a numpy array of shape (B, T, D), got {action_arr.shape}"
             )
 
-            # Verify action horizon matches the expected temporal dimension from config
-            assert action_arr.shape[1] == len(self.modality_configs["action"].delta_indices), (
-                f"Action key '{action_key}'s horizon must be {len(self.modality_configs['action'].delta_indices)}. Got {action_arr.shape[1]}"
-            )
+            # # Verify action horizon matches the expected temporal dimension from config
+            # assert action_arr.shape[1] == len(self.modality_configs["action"].delta_indices), (
+            #     f"Action key '{action_key}'s horizon must be {len(self.modality_configs['action'].delta_indices)}. Got {action_arr.shape[1]}"
+            # )
 
     def get_modality_config(self) -> dict[str, ModalityConfig]:
         return self.modality_configs
@@ -679,10 +684,10 @@ class Gr00tSimPolicyWrapper(PolicyWrapper):
                 f"Action key '{action_key}' must be a numpy array of shape (B, T, D), got {action_arr.shape}"
             )
 
-            # Verify action horizon matches the expected temporal dimension from config
-            assert action_arr.shape[1] == len(modality_configs["action"].delta_indices), (
-                f"Action key '{action_key}'s horizon must be {len(modality_configs['action'].delta_indices)}. Got {action_arr.shape[1]}"
-            )
+            # # Verify action horizon matches the expected temporal dimension from config
+            # assert action_arr.shape[1] == len(modality_configs["action"].delta_indices), (
+            #     f"Action key '{action_key}'s horizon must be {len(modality_configs['action'].delta_indices)}. Got {action_arr.shape[1]}"
+            # )
 
     def get_modality_config(self) -> dict[str, ModalityConfig]:
         """Get the modality configuration from the underlying policy.

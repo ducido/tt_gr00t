@@ -324,6 +324,7 @@ class Gr00tN1d6ActionHead(nn.Module):
             timesteps_tensor = torch.full(
                 size=(batch_size,), fill_value=t_discretized, device=device
             )
+
             action_features = self.action_encoder(actions, timesteps_tensor, embodiment_id)
             # Add position embedding.
             if self.config.add_pos_embed:
@@ -514,7 +515,7 @@ class Gr00tN1d6(PreTrainedModel):
 
         return action_outputs
 
-    def get_action(self, inputs: dict) -> BatchFeature:
+    def get_action(self, inputs: dict, n_action_steps: int) -> BatchFeature:
         """
         Generate actions using the complete model.
         """
@@ -546,7 +547,7 @@ class Gr00tN1d6(PreTrainedModel):
 
         return action_outputs
 
-    def knn_get_action(self, inputs: dict, contrast_inputs: dict, knn_k: int) -> BatchFeature:
+    def knn_get_action(self, inputs: dict, contrast_inputs: dict, knn_k: int, n_candidates=24) -> BatchFeature:
         """
         Generate actions using the complete model.
         """
@@ -562,11 +563,16 @@ class Gr00tN1d6(PreTrainedModel):
 
         # concat dim=0 backbone_outputs
         for k in backbone_outputs.keys():
-            backbone_outputs[k] = torch.cat([backbone_outputs[k], contrast_backbone_outputs[k]], dim=0)
+            x = torch.cat(
+                [backbone_outputs[k], contrast_backbone_outputs[k]],
+                dim=0
+            )
+            backbone_outputs[k] = split_repeat_concat(x, n_candidates)
 
         for k in action_inputs.keys():
             if k != 'pixel_values':
-                action_inputs[k] = torch.cat([action_inputs[k], contrast_action_inputs[k]], dim=0)
+                x = torch.cat([action_inputs[k], contrast_action_inputs[k]], dim=0)
+                action_inputs[k] = split_repeat_concat(x, n_candidates)
             else:
                 action_inputs[k] = action_inputs[k] + contrast_action_inputs[k]
 
@@ -575,8 +581,21 @@ class Gr00tN1d6(PreTrainedModel):
         raw_action_outputs = {}
         contrast_action_outputs = {}
         for k in action_outputs.keys():
-            raw_action_outputs[k], contrast_action_outputs[k] = torch.chunk(action_outputs[k], 2, dim=0)   
+            raw_action_outputs[k], contrast_action_outputs[k] = torch.chunk(action_outputs[k], 2, dim=0)
 
+        assert raw_action_outputs['action_pred'].shape[0] % n_candidates == 0
+        B = raw_action_outputs['action_pred'].shape[0] // n_candidates
+        raw = raw_action_outputs['action_pred']       # [120, 50, 128]
+        contrast = contrast_action_outputs['action_pred']
+        raw_action = raw.reshape(int(B), n_candidates, *raw.shape[1:])
+        contrast_action = contrast.reshape(int(B), n_candidates, *contrast.shape[1:])
+
+        all_best_actions = []
+        for i in range(int(B)):
+            best_action = cd_with_knn(raw_action[i], contrast_action[i], knn_k)
+            all_best_actions.append(best_action)
+        best_action = torch.cat(all_best_actions, dim=0)
+        raw_action_outputs['action_pred'] = best_action
         return raw_action_outputs
 
     @property
@@ -602,3 +621,56 @@ def compute_jerk(actions):
     a = v[1:] - v[:-1]
     jerk = a[1:] - a[:-1]
     return np.sqrt((jerk**2).mean())
+
+
+def split_repeat_concat(x, num_repeats):
+    # split thành list 10 tensors [1, ...]
+    xs = torch.split(x, 1, dim=0)
+
+    out = []
+    for xi in xs:
+        num_dims = xi.dim()
+        xi = xi.repeat(num_repeats, *[1] * (num_dims - 1))
+        out.append(xi)
+
+    return torch.cat(out, dim=0)
+
+
+def cd_with_knn(actions, contrast_actions, knn_k, eps=1e-8):
+    """
+    actions: (N, T, D) = (24, 50, 128)
+    contrast_actions: same shape
+
+    return:
+        best_action: (1, T, D)
+    """
+    original_actions = actions.clone()
+
+    actions = actions[:,:8,:7]
+    contrast_actions = contrast_actions[:,:8,:7]
+
+    N = actions.shape[0]
+    A = actions.reshape(N, -1).float()              # (N, 28)
+    B = contrast_actions.reshape(N, -1).float()     # (N, 28)
+
+    # kNN in B
+    dist_AB = torch.cdist(A, B, p=2) ** 2   # (N, N)
+    knn_dist_AB, _ = torch.topk(dist_AB, k=knn_k, largest=False, dim=1)
+    R_B = knn_dist_AB.sum(dim=1)  # (N,)
+
+    # kNN in A (exclude self)
+    dist_AA = torch.cdist(A, A, p=2) ** 2   # (N, N)
+    # mask diagonal (self-distance = 0)
+    inf_mask = torch.eye(N, device=A.device) * 1e9
+    dist_AA = dist_AA + inf_mask
+    knn_dist_AA, _ = torch.topk(dist_AA, k=knn_k, largest=False, dim=1)
+    R_A = knn_dist_AA.sum(dim=1)  # (N,)
+
+    # best of N 
+    scores = torch.log(R_B + eps) - torch.log(R_A + eps)  # (N,)
+    best_idx = torch.argmax(scores)
+
+    
+    best_action = original_actions[best_idx:best_idx+1]  # (1, T, D)
+
+    return best_action

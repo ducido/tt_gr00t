@@ -253,6 +253,7 @@ def run_rollout_gymnasium_policy(
     n_envs: int = 1,
     knn_k: int | None = None,
     contrast_config: dict | None = None,
+    n_action_steps: int | None = None,
 ) -> Any:
     """Run policy rollouts in parallel environments.
 
@@ -303,12 +304,13 @@ def run_rollout_gymnasium_policy(
     if knn_k:
         config['env'] = env
         contrast_image_generator = get_contrast_image_generator(config)
+        contrast_image_generator.reset()
+
     #######
 
     # Initial reset
     observations, _ = env.reset() # odict_keys(['annotation.human.action.task_description', 'state.gripper', 'state.pad', 'state.pitch', 'state.roll', 'state.x', 'state.y', 'state.yaw', 'state.z', 'video.image_0'])
     observations_copy = copy.deepcopy(observations)
-    contrast_image_generator.reset()
     policy.reset()
     i = 0
 
@@ -324,10 +326,12 @@ def run_rollout_gymnasium_policy(
 
             contrast_observations = {k:v for k, v in observations.items()}
             contrast_observations['video.image_0'] = all_contrast_images
-            actions, _ = policy.get_action(observations, options={'knn_k': knn_k, 'contrast_inputs': contrast_observations})
+            actions, _ = policy.get_action(observations, options={'knn_k': knn_k, 'contrast_inputs': contrast_observations, 'n_action_steps': n_action_steps})
         else:
-            actions, _ = policy.get_action(observations, options={})
+            actions, _ = policy.get_action(observations, options={'n_action_steps': n_action_steps})
+
         # print(actions.keys()) # dict_keys(['action.x', 'action.y', 'action.z', 'action.roll', 'action.pitch', 'action.yaw', 'action.gripper'])
+        # print(actions['action.x'].shape)
         # breakpoint()
         # atv = compute_atv(actions)
         # jerk = compute_jerk(actions)
@@ -455,17 +459,19 @@ def run_gr00t_sim_policy(
     policy_client_port: int | None = None,
     n_envs: int = 8,
     n_action_steps: int = 8,
+    video_dir: str | None = None,
     knn_k: int | None = None,
     contrast_config: dict | None = None,
 ):
     embodiment_tag = get_embodiment_tag_from_env_name(env_name)
 
-    if model_path:
-        video_dir = (
-            f"/tmp/sim_eval_videos_{model_path.split('/')[-3]}_ac{n_action_steps}_{uuid.uuid4()}"
-        )
-    else:
-        video_dir = f"/tmp/sim_eval_videos_{env_name}_ac{n_action_steps}_{uuid.uuid4()}"
+    if video_dir is None:
+        if model_path:
+            video_dir = (
+                f"/tmp/sim_eval_videos_{model_path.split('/')[-3]}_ac{n_action_steps}_{uuid.uuid4()}"
+            )
+        else:
+            video_dir = f"/tmp/sim_eval_videos_{env_name}_ac{n_action_steps}_{uuid.uuid4()}"
     wrapper_configs = WrapperConfigs(
         video=VideoConfig(
             video_dir=video_dir,
@@ -514,6 +520,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--n_envs", type=int, default=8)
     parser.add_argument("--n_action_steps", type=int, default=20)
+    parser.add_argument("--video_dir", type=str, default=None)
     parser.add_argument("--knn_k", type=int, default=None)
     parser.add_argument("--search_opts", nargs="+", default=[])
 
@@ -531,6 +538,7 @@ if __name__ == "__main__":
     )
 
     ### build contrast image generator
+    config=None
     if args.knn_k:
         import sys
         sys.path.append('/projects/extern/kisski/kisski-spath/dir.project/VLA_Imit/Isaac-GR00T')
@@ -586,6 +594,7 @@ if __name__ == "__main__":
         policy_client_port=args.policy_client_port,
         n_envs=args.n_envs,
         n_action_steps=args.n_action_steps,
+        video_dir=args.video_dir,
         knn_k=args.knn_k,
         contrast_config=config
     )

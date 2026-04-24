@@ -234,13 +234,15 @@ class Gr00tN1d6Processor(BaseProcessor):
         action: np.ndarray,
         embodiment_tag: EmbodimentTag,
         state: dict[str, np.ndarray] | None = None,
+        n_action_steps: int | None = None,
     ):
         """Undo action normalization and convert relative actions to absolute."""
         # Split concatenated action into joint groups
         out_dict = {}
         start_idx = 0
         joint_groups = self.modality_configs[embodiment_tag.value]["action"].modality_keys
-        action_horizon = len(self.modality_configs[embodiment_tag.value]["action"].delta_indices)
+        # action_horizon = len(self.modality_configs[embodiment_tag.value]["action"].delta_indices)
+        action_horizon = n_action_steps
         for key in joint_groups:
             joint_dim = self.state_action_processor.norm_params[embodiment_tag.value]["action"][
                 key
