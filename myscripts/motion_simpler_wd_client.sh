@@ -3,33 +3,41 @@ export CUDA_VISIBLE_DEVICES=0
 
 TASKS=(
   simpler_env_widowx/widowx_carrot_on_plate
-#   simpler_env_widowx/widowx_put_eggplant_in_basket
-#   simpler_env_widowx/widowx_spoon_on_towel
-#   simpler_env_widowx/widowx_stack_cube
+  simpler_env_widowx/widowx_put_eggplant_in_basket
+  simpler_env_widowx/widowx_spoon_on_towel
+  simpler_env_widowx/widowx_stack_cube
 )
 
-knn_k=3
-search_opts="by grounded_sam_tracking alpha 0.2 num_repeats 24"
+action_horizon=10
+EPISODES=50
+N_envs=1
+
+long_ah=30
+search_opts="n_candidates 24 long_ah $long_ah"
 
 
-LOG_DIR="eval_logs/knn_${knn_k}_nac8_actiondim7"
-mkdir -p "$LOG_DIR"
 
 for TASK in "${TASKS[@]}"; do
     NAME=$(basename "$TASK")
 
+    LOG_DIR="eval_logs/simpler_env/M_motion_long_ah_${long_ah}_ah_${action_horizon}/$NAME"
+    VIDEO_DIR="$LOG_DIR/videos"
+    mkdir -p "$LOG_DIR"
+    mkdir -p "$VIDEO_DIR"
+
     echo "Running task: $TASK"
 
     gr00t/eval/sim/SimplerEnv/simpler_uv/.venv/bin/python gr00t/eval/rollout_policy.py \
-        --knn_k $knn_k \
+        --algo "motion" \
         --search_opts $search_opts \
-        --n_episodes 50 \
+        --n_episodes $EPISODES \
         --policy_client_host 127.0.0.1 \
         --policy_client_port 5555 \
         --max_episode_steps=300 \
         --env_name "$TASK" \
-        --n_action_steps 10 \
-        --n_envs 5 \
+        --n_action_steps $action_horizon \
+        --n_envs $N_envs \
+        --video_dir "$VIDEO_DIR" \
         > "$LOG_DIR/${NAME}.txt" 2>&1
 
     echo "Finished task: $TASK"

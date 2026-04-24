@@ -598,6 +598,89 @@ class Gr00tN1d6(PreTrainedModel):
         raw_action_outputs['action_pred'] = best_action
         return raw_action_outputs
 
+
+    def M_motion_get_action(self, inputs: dict, config: dict) -> BatchFeature:
+        """
+        Generate actions using the complete model.
+        """
+        # Prepare inputs for backbone and action head
+
+        print(config)
+        
+        backbone_inputs, action_inputs = self.prepare_input(inputs)
+
+        # Forward through backbone
+        backbone_outputs = self.backbone(backbone_inputs)
+
+        # concat dim=0 backbone_outputs
+        for k in backbone_outputs.keys():
+            backbone_outputs[k] = split_repeat_concat(backbone_outputs[k], config['n_candidates'])
+
+        for k in action_inputs.keys():
+            if k != 'pixel_values':
+                action_inputs[k] = split_repeat_concat(action_inputs[k], config['n_candidates'])
+            else:
+                action_inputs[k] = action_inputs[k]
+
+        action_outputs = self.action_head.get_action(backbone_outputs, action_inputs)
+        '''
+        action_pred torch.Size([24, 50, 128])
+        backbone_features torch.Size([24, 108, 2048])
+        state_features torch.Size([24, 1, 1536])
+        '''
+
+        long_action = action_outputs['action_pred'][:,:config['long_ah'],:7]
+        short_action = action_outputs['action_pred'][:,:config['short_ah'],:7]
+        print(long_action.shape, short_action.shape)
+
+        def jerk_smoothest_action(long_action):
+            """
+            long_action: torch.Tensor of shape (C, T, D)
+
+            Returns:
+                best_idx: int
+                best_action: (T, D)
+                jerk_rms: (C,)
+            """
+            assert long_action.ndim == 3
+            C, T, D = long_action.shape
+            assert T >= 4, "Need at least 4 timesteps to compute jerk"
+
+            # Normalize long_action
+            std = long_action.std(dim=(0,1), keepdim=True)
+            norm_long_action = long_action / (std + 1e-6)
+
+            # Compute jerk (C, T-3, D)
+            jerk = (
+                norm_long_action[:, 3:, :-1]
+                - 3 * norm_long_action[:, 2:-1, :-1]
+                + 3 * norm_long_action[:, 1:-2, :-1]
+                - norm_long_action[:, :-3, :-1]
+            )
+
+            # ||j||^2 over action dim → (C, T-3)
+            jerk_sq = (jerk ** 2).sum(dim=-1)
+            # mean over time → (C,)
+            jerk_mean = jerk_sq.mean(dim=1)
+            # RMS → (C,)
+            jerk_rms = torch.sqrt(jerk_mean + 1e-8)  # tránh nan
+            # best candidate
+            best_idx = torch.argmin(jerk_rms)
+            best_action = long_action[best_idx:best_idx+1]
+            return best_action
+
+        best_smooth_long_action = jerk_smoothest_action(long_action)
+
+        def select_best_from_N(short_action, best_smooth_long_action, short_ah):
+            ref = best_smooth_long_action[:,:short_ah]
+            dist = ((short_action - ref)**2).sum(dim=(-1, -2))
+            idx = torch.argmin(dist)
+            return short_action[idx:idx+1]
+
+        best_actions = select_best_from_N(short_action, best_smooth_long_action, short_ah=config['short_ah'])
+        action_outputs['action_pred'] = best_actions
+        return action_outputs
+
     @property
     def device(self):
         return next(iter(self.parameters())).device

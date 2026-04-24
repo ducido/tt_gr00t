@@ -343,17 +343,20 @@ class Gr00tPolicy(BasePolicy):
         collated_inputs, states = prepare_inputs(observation)
 
         ###### update all keys in options to collated_inputs
+        collated_inputs['config'] = {}
         for k, v in options.items():
-            collated_inputs[k] = v
+            collated_inputs['config'][k] = v
             if k == 'contrast_inputs':
-                collated_inputs[k] = prepare_inputs(v)[0]['inputs']
+                collated_inputs['config'][k] = prepare_inputs(v)[0]['inputs']
         ######
 
 
         # Step 4: Run model inference to predict actions
         with torch.inference_mode():
-            if 'knn_k' in collated_inputs:
+            if collated_inputs['config']['algo'] == 'knn':
                 model_pred = self.model.knn_get_action(**collated_inputs)
+            elif collated_inputs['config']['algo'] == 'motion':
+                model_pred = self.model.M_motion_get_action(**collated_inputs)
             else:
                 model_pred = self.model.get_action(**collated_inputs)
         normalized_action = model_pred["action_pred"].float()
@@ -366,11 +369,7 @@ class Gr00tPolicy(BasePolicy):
         unnormalized_action = self.processor.decode_action(
             normalized_action.cpu().numpy(), self.embodiment_tag, batched_states, n_action_steps=options.get('n_action_steps')
         )
-
-        # print(unnormalized_action.keys())
-        # print(unnormalized_action['x'].shape)
-        # breakpoint()
-
+        
         # Cast all actions to float32 for consistency
         casted_action = {
             key: value.astype(np.float32) for key, value in unnormalized_action.items()

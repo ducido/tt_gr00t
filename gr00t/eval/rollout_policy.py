@@ -251,8 +251,8 @@ def run_rollout_gymnasium_policy(
     wrapper_configs: WrapperConfigs,
     n_episodes: int = 10,
     n_envs: int = 1,
-    knn_k: int | None = None,
-    contrast_config: dict | None = None,
+    algo: str | None = None,
+    other_config: dict | None = None,
     n_action_steps: int | None = None,
 ) -> Any:
     """Run policy rollouts in parallel environments.
@@ -301,9 +301,9 @@ def run_rollout_gymnasium_policy(
     episode_infos = defaultdict(list)
 
     #######
-    if knn_k:
-        config['env'] = env
-        contrast_image_generator = get_contrast_image_generator(config)
+    if algo == 'knn':
+        other_config['env'] = env
+        contrast_image_generator = get_contrast_image_generator(other_config)
         contrast_image_generator.reset()
 
     #######
@@ -316,7 +316,7 @@ def run_rollout_gymnasium_policy(
 
     pbar = tqdm(total=n_episodes, desc="Episodes")
     while completed_episodes < n_episodes:
-        if knn_k:
+        if algo == 'knn':
             all_contrast_images = []
             for i in range(len(observations['video.image_0'])):
                 observations['video.single_image_0'] = observations['video.image_0'][i]
@@ -326,9 +326,11 @@ def run_rollout_gymnasium_policy(
 
             contrast_observations = {k:v for k, v in observations.items()}
             contrast_observations['video.image_0'] = all_contrast_images
-            actions, _ = policy.get_action(observations, options={'knn_k': knn_k, 'contrast_inputs': contrast_observations, 'n_action_steps': n_action_steps})
+            actions, _ = policy.get_action(observations, options={'algo': algo, 'n_candidates': other_config['n_candidates'], 'knn_k': other_config['knn_k'], 'contrast_inputs': contrast_observations, 'action_horizon': n_action_steps})
+        elif algo == 'motion':
+            actions, _ = policy.get_action(observations, options={'algo': algo, 'n_candidates': other_config['n_candidates'] ,'long_ah': other_config['long_ah'], 'short_ah': n_action_steps})
         else:
-            actions, _ = policy.get_action(observations, options={'n_action_steps': n_action_steps})
+            actions, _ = policy.get_action(observations, options={'algo': algo, 'action_horizon': n_action_steps})
 
         # print(actions.keys()) # dict_keys(['action.x', 'action.y', 'action.z', 'action.roll', 'action.pitch', 'action.yaw', 'action.gripper'])
         # print(actions['action.x'].shape)
@@ -454,14 +456,14 @@ def run_gr00t_sim_policy(
     env_name: str,
     n_episodes: int,
     max_episode_steps: int,
-    model_path: str = "",
+    model_path: str = "",   
     policy_client_host: str = "",
     policy_client_port: int | None = None,
     n_envs: int = 8,
     n_action_steps: int = 8,
     video_dir: str | None = None,
-    knn_k: int | None = None,
-    contrast_config: dict | None = None,
+    algo: str | None = None,
+    other_config: dict | None = None,
 ):
     embodiment_tag = get_embodiment_tag_from_env_name(env_name)
 
@@ -495,8 +497,9 @@ def run_gr00t_sim_policy(
         wrapper_configs=wrapper_configs,
         n_episodes=n_episodes,
         n_envs=n_envs,
-        knn_k=knn_k,
-        contrast_config=contrast_config,
+        algo=algo,
+        other_config=other_config,
+        n_action_steps=n_action_steps,
     )
     print("Video saved to: ", wrapper_configs.video.video_dir)
     return results
@@ -521,7 +524,7 @@ if __name__ == "__main__":
     parser.add_argument("--n_envs", type=int, default=8)
     parser.add_argument("--n_action_steps", type=int, default=20)
     parser.add_argument("--video_dir", type=str, default=None)
-    parser.add_argument("--knn_k", type=int, default=None)
+    parser.add_argument("--algo", type=str, default=None)
     parser.add_argument("--search_opts", nargs="+", default=[])
 
 
@@ -539,20 +542,16 @@ if __name__ == "__main__":
 
     ### build contrast image generator
     config=None
-    if args.knn_k:
+    if args.algo:
         import sys
         sys.path.append('/projects/extern/kisski/kisski-spath/dir.project/VLA_Imit/Isaac-GR00T')
         from contrast_utils import get_contrast_image_generator
         import re 
 
         CONTRAST_IMAGE_CONFIG = dict(
-            camera_name=None,
-            by="gt",
-            inpaint_mode="lama",
-            color="auto",
-            sigma=5,
-            version=2,
-            get_all_parts=False,
+            n_candidates=None,
+            knn_k=None,
+            long_ah=None
         )
         def parse_opts(opts):
             if len(opts) == 0:
@@ -595,8 +594,8 @@ if __name__ == "__main__":
         n_envs=args.n_envs,
         n_action_steps=args.n_action_steps,
         video_dir=args.video_dir,
-        knn_k=args.knn_k,
-        contrast_config=config
+        algo=args.algo,
+        other_config=config
     )
     print("results: ", results)
     print("success rate: ", np.mean(results[1]))
