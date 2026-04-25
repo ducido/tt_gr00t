@@ -547,11 +547,14 @@ class Gr00tN1d6(PreTrainedModel):
 
         return action_outputs
 
-    def knn_get_action(self, inputs: dict, contrast_inputs: dict, knn_k: int, n_candidates=24) -> BatchFeature:
+    def knn_get_action(self, inputs: dict, config: dict) -> BatchFeature:
         """
         Generate actions using the complete model.
         """
         # Prepare inputs for backbone and action head
+        knn_k = config['knn_k']
+        contrast_inputs = config['contrast_inputs']
+        n_candidates = config['n_candidates']
         print(f"Best-of-N KNN k = {knn_k}")
         
         backbone_inputs, action_inputs = self.prepare_input(inputs)
@@ -585,14 +588,68 @@ class Gr00tN1d6(PreTrainedModel):
 
         assert raw_action_outputs['action_pred'].shape[0] % n_candidates == 0
         B = raw_action_outputs['action_pred'].shape[0] // n_candidates
-        raw = raw_action_outputs['action_pred']       # [120, 50, 128]
-        contrast = contrast_action_outputs['action_pred']
+        raw = raw_action_outputs['action_pred'][:,:config['action_horizon'],:7]       # [24, 50, 128]
+        contrast = contrast_action_outputs['action_pred'][:,:config['action_horizon'],:7]
         raw_action = raw.reshape(int(B), n_candidates, *raw.shape[1:])
         contrast_action = contrast.reshape(int(B), n_candidates, *contrast.shape[1:])
 
         all_best_actions = []
         for i in range(int(B)):
             best_action = cd_with_knn(raw_action[i], contrast_action[i], knn_k)
+            all_best_actions.append(best_action)
+        best_action = torch.cat(all_best_actions, dim=0)
+        raw_action_outputs['action_pred'] = best_action
+        return raw_action_outputs
+
+
+    def pcd_get_action(self, inputs: dict, config: dict) -> BatchFeature:
+        """
+        Generate actions using the complete model.
+        """
+        # Prepare inputs for backbone and action head
+        contrast_inputs = config['contrast_inputs']
+        n_candidates = config['n_candidates']
+        print(f'action_horizon: {config['action_horizon']}, alpha: {config['alpha']}, bandwidth_factor: {config['bandwidth_factor']}, keep_threshold: {config['keep_threshold']}')
+        
+        backbone_inputs, action_inputs = self.prepare_input(inputs)
+        contrast_backbone_inputs, contrast_action_inputs = self.prepare_input(contrast_inputs)
+
+        # Forward through backbone
+        backbone_outputs = self.backbone(backbone_inputs)
+        contrast_backbone_outputs = self.backbone(contrast_backbone_inputs)
+
+        # concat dim=0 backbone_outputs
+        for k in backbone_outputs.keys():
+            x = torch.cat(
+                [backbone_outputs[k], contrast_backbone_outputs[k]],
+                dim=0
+            )
+            backbone_outputs[k] = split_repeat_concat(x, n_candidates)
+
+        for k in action_inputs.keys():
+            if k != 'pixel_values':
+                x = torch.cat([action_inputs[k], contrast_action_inputs[k]], dim=0)
+                action_inputs[k] = split_repeat_concat(x, n_candidates)
+            else:
+                action_inputs[k] = action_inputs[k] + contrast_action_inputs[k]
+
+        action_outputs = self.action_head.get_action(backbone_outputs, action_inputs)
+
+        raw_action_outputs = {}
+        contrast_action_outputs = {}
+        for k in action_outputs.keys():
+            raw_action_outputs[k], contrast_action_outputs[k] = torch.chunk(action_outputs[k], 2, dim=0)
+
+        assert raw_action_outputs['action_pred'].shape[0] % n_candidates == 0
+        B = raw_action_outputs['action_pred'].shape[0] // n_candidates
+        raw = raw_action_outputs['action_pred'][:,:config['action_horizon'],:7]       # [24, 50, 128]
+        contrast = contrast_action_outputs['action_pred'][:,:config['action_horizon'],:7]
+        raw_action = raw.reshape(int(B), n_candidates, *raw.shape[1:])
+        contrast_action = contrast.reshape(int(B), n_candidates, *contrast.shape[1:])
+
+        all_best_actions = []
+        for i in range(int(B)):
+            best_action = cd_with_pcd(data=raw_action[i], contrast_data=contrast_action[i], alpha=config['alpha'], bandwidth_factor=config['bandwidth_factor'], keep_threshold=config['keep_threshold'])
             all_best_actions.append(best_action)
         best_action = torch.cat(all_best_actions, dim=0)
         raw_action_outputs['action_pred'] = best_action
@@ -727,10 +784,6 @@ def cd_with_knn(actions, contrast_actions, knn_k, eps=1e-8):
     return:
         best_action: (1, T, D)
     """
-    original_actions = actions.clone()
-
-    actions = actions[:,:8,:7]
-    contrast_actions = contrast_actions[:,:8,:7]
 
     N = actions.shape[0]
     A = actions.reshape(N, -1).float()              # (N, 28)
@@ -754,6 +807,63 @@ def cd_with_knn(actions, contrast_actions, knn_k, eps=1e-8):
     best_idx = torch.argmax(scores)
 
     
-    best_action = original_actions[best_idx:best_idx+1]  # (1, T, D)
+    best_action = actions[best_idx:best_idx+1]  # (1, T, D)
 
     return best_action
+
+
+import math
+def kde_torch(x, data, bandwidth, kernel_func):
+    # x -> (N, B) -> (N, B, 1)
+    x = x.unsqueeze(-1)
+    # data -> (N, B) -> (N, 1, B)
+    data = data.unsqueeze(1)
+    # (N, B, 1) - (N, 1, B) -> (N, B, B)
+    bandwidth_ = bandwidth.unsqueeze(-1).unsqueeze(-1) if not isinstance(bandwidth, float) else bandwidth
+    kernel_values = kernel_func((x - data) / bandwidth_)
+    # (N, B, B) -> (N, B)
+    bandwidth_ = bandwidth.unsqueeze(-1) if not isinstance(bandwidth, float) else bandwidth
+    density_estimation = kernel_values.sum(dim=-1) / (data.shape[-1] * bandwidth_)
+    return density_estimation
+
+def scott_rule_torch(data):
+    return 1.06 * torch.std(data, dim=-1) * data.shape[-1] ** (-1 / 5)
+
+def gaussian_kernel_torch(x):
+    return (1 / math.sqrt(2 * math.pi)) * torch.exp(-0.5 * x ** 2)
+
+def cd_with_pcd(data, contrast_data, alpha, bandwidth_factor, keep_threshold):
+    B, T, D = data.shape
+    N = T * D
+    data = data.reshape(B, N).permute(1, 0) # 28,24
+    contrast_data = contrast_data.reshape(B, N).permute(1, 0)
+    
+    bandwidth = bandwidth_factor * scott_rule_torch(data)
+    prob = kde_torch(data, data, bandwidth, gaussian_kernel_torch)
+    
+    contrast_bandwidth = bandwidth_factor * scott_rule_torch(contrast_data)
+    contrast_prob = kde_torch(data, contrast_data, contrast_bandwidth, gaussian_kernel_torch)
+    
+    contrast_factor = prob / contrast_prob
+    final_prob = prob * contrast_factor ** alpha
+    
+    final_prob[prob < keep_threshold * prob.max(dim=-1, keepdims=True).values] = 0.0
+    final_prob = final_prob / final_prob.max(dim=-1, keepdims=True).values * prob.max(dim=-1, keepdims=True).values
+    
+    # [N, B] -> [N,] -> [T, D].   (28, 24) -> (24) -> (4,7)
+    sample = data[range(N), prob.argmax(dim=-1)].reshape(T, D)
+    contrast_sample = data[range(N), final_prob.argmax(dim=-1)].reshape(T, D)
+
+    # import matplotlib.pyplot as plt
+    # import seaborn as sns
+    # for i in range(3):
+    #     plt.subplot(3, 1, i + 1)
+    #     sns.lineplot(x=data[i].float().cpu().numpy(), y=prob[i].float().cpu().numpy(), color='blue')
+    #     sns.lineplot(x=data[i].float().cpu().numpy(), y=contrast_prob[i].float().cpu().numpy(), color='red')
+    #     sns.lineplot(x=data[i].float().cpu().numpy(), y=final_prob[i].float().cpu().numpy(), color='green')
+    # plt.savefig('visualize/pi0.jpg')
+    # plt.close()
+
+    # update x, y, z, roll, pitch, yaw
+    sample[:, :6] = contrast_sample[:, :6]
+    return sample.unsqueeze(0)

@@ -355,8 +355,12 @@ class Gr00tPolicy(BasePolicy):
         with torch.inference_mode():
             if collated_inputs['config']['algo'] == 'knn':
                 model_pred = self.model.knn_get_action(**collated_inputs)
+            elif collated_inputs['config']['algo'] == 'pcd':
+                model_pred = self.model.pcd_get_action(**collated_inputs)
             elif collated_inputs['config']['algo'] == 'motion':
                 model_pred = self.model.M_motion_get_action(**collated_inputs)
+            elif collated_inputs['config']['algo'] == 'neg_prompt':
+                model_pred = self.model.knn_get_action(**collated_inputs)
             else:
                 model_pred = self.model.get_action(**collated_inputs)
         normalized_action = model_pred["action_pred"].float()

@@ -8,11 +8,11 @@ TASKS=(
   simpler_env_widowx/widowx_stack_cube
 )
 
-action_horizon=10
+action_horizon=20
 EPISODES=50
 N_envs=1
 
-long_ah=30
+long_ah=50
 search_opts="n_candidates 24 long_ah $long_ah"
 
 

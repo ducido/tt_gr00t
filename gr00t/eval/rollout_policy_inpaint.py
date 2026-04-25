@@ -321,7 +321,7 @@ def run_rollout_gymnasium_policy(
             all_contrast_images = []
             for i in range(len(observations['video.image_0'])):
                 observations['video.single_image_0'] = observations['video.image_0'][i]
-                contrast_image = contrast_image_generator.generate(observations, observations['annotation.human.action.task_description'][0], is_inpaint=False)
+                contrast_image = contrast_image_generator.generate(observations, observations['annotation.human.action.task_description'][0], is_inpaint=True)
                 all_contrast_images.append(contrast_image)
             all_contrast_images = np.stack(all_contrast_images)[:,None,:,:,:]
 

@@ -136,7 +136,7 @@ class ContrastImageGenerator:
         self.predictor = None
         self.inpainter = build_inpainter(inpaint_mode)
     
-    def generate(self, obs, task_description, logging=None, is_inpaint=True):
+    def generate(self, obs, task_description, is_inpaint=True):
         if task_description != self.task_description:
             self.reset_mask_and_keep_object_names(task_description)
             self.task_description = task_description
@@ -151,26 +151,25 @@ class ContrastImageGenerator:
             mask, excluded_mask = self.get_mask_by_predictor(obs, reverse_mask=False)
 
         if is_inpaint:
+            print("is_inpaint")
             image = self.inpainter.inpaint(self._get_rgb_image(obs), mask, excluded_mask)
         else:
+
+            # print("No inpainting, masking objects")
+            # rbg_image = self._get_rgb_image(obs)
+            # masked_image = np.where(mask[..., None] == 0, rbg_image, 0)
+            # image = masked_image
+
+            # print("No inpainting, masking objects with bbox noise")
+            # rbg_image = self._get_rgb_image(obs)
+            # masked_image = mask_with_bbox_noise(rbg_image, mask, pad=10)
+            # image = masked_image
+
+            # masked_image = mask_with_bbox_noise(rbg_image, mask, pad=10)
+            print("No inpainting, masking objects with bbox zero")
             rbg_image = self._get_rgb_image(obs)
+            masked_image = mask_with_bbox_zero(rbg_image, mask, pad=15)
 
-            # logging.info("No inpainting, masking objects")
-            # rbg_image = self._get_rgb_image(obs)
-        
-            # masked_image = np.where(excluded_mask[..., None] == 0, rbg_image, 0)
-            # image = masked_image
-
-            # logging.info("No inpainting, masking objects with bbox noise")
-            # rbg_image = self._get_rgb_image(obs)
-            # masked_image = mask_with_bbox_noise(rbg_image, mask, pad=10)
-            # image = masked_image
-
-            # masked_image = mask_with_bbox_noise(rbg_image, mask, pad=10)
-            # logging.info("No inpainting, masking objects with bbox zero")
-            # masked_image = mask_with_bbox_zero(rbg_image, mask, pad=15)
-            logging.info("No inpainting, masking GRIPPER with bbox zero pad 20")
-            masked_image = mask_with_bbox_zero(rbg_image, excluded_mask, pad=20)
             image = masked_image
         return image
     
