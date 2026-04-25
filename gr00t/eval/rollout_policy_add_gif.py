@@ -16,7 +16,28 @@ import gymnasium as gym
 import numpy as np
 from tqdm import tqdm
 import torch
+import mediapy
+def write_video(images, path, fps=10):
+    mediapy.write_video(path, images, fps=fps, codec='gif')
 
+def tile_images(images):
+    # images: list of images, each image is a numpy array
+    # return: a numpy array
+    num_images = len(images)
+    if num_images == 0:
+        return None
+
+    num_rows = int(np.ceil(np.sqrt(num_images)))
+    num_cols = int(np.ceil(num_images / num_rows))
+    image_shape = images[0].shape
+
+    tiled_image = np.zeros((num_rows * image_shape[0], num_cols * image_shape[1], image_shape[2]), dtype=np.uint8)
+    for i, image in enumerate(images):
+        row = i // num_cols
+        col = i % num_cols
+        tiled_image[row*image_shape[0]:(row+1)*image_shape[0], col*image_shape[1]:(col+1)*image_shape[1], :] = image
+
+    return tiled_image
 
 @dataclass
 class VideoConfig:
@@ -251,6 +272,7 @@ def run_rollout_gymnasium_policy(
     wrapper_configs: WrapperConfigs,
     n_episodes: int = 10,
     n_envs: int = 1,
+    video_dir: str | None = None,
     algo: str | None = None,
     other_config: dict | None = None,
     n_action_steps: int | None = None,
@@ -314,6 +336,7 @@ def run_rollout_gymnasium_policy(
     observations_copy = copy.deepcopy(observations)
     policy.reset()
     i = 0
+    frames = []
 
     pbar = tqdm(total=n_episodes, desc="Episodes")
     while completed_episodes < n_episodes:
@@ -327,6 +350,11 @@ def run_rollout_gymnasium_policy(
 
             contrast_observations = {k:v for k, v in observations_copy.items()}
             contrast_observations['video.image_0'] = all_contrast_images
+
+            #### for visualize
+            frames.append(tile_images([observations['video.image_0'][0][0], contrast_observations['video.image_0'][0][0]]))  
+            ####
+
             actions, _ = policy.get_action(observations, options={'algo': algo, 'n_candidates': other_config['n_candidates'], 'knn_k': other_config['knn_k'], 'contrast_inputs': contrast_observations, 'action_horizon': n_action_steps})
         elif algo == 'pcd':
             all_contrast_images = []
@@ -441,6 +469,12 @@ def run_rollout_gymnasium_policy(
                     pbar.update(1)
                 current_rewards[env_idx] = 0
                 current_lengths[env_idx] = 0
+
+                ## reset visualize gif env_infos["final_info"][env_idx]["success"]
+                success = env_infos["final_info"][env_idx]["success"][-1]
+                write_video(frames, f"{video_dir}/episode_{completed_episodes-1}_success_{success}.gif")
+                frames = []
+
         observations = next_obs
     pbar.close()
 
@@ -515,7 +549,7 @@ def run_gr00t_sim_policy(
             video_dir = f"/tmp/sim_eval_videos_{env_name}_ac{n_action_steps}_{uuid.uuid4()}"
     wrapper_configs = WrapperConfigs(
         video=VideoConfig(
-            video_dir=video_dir,
+            video_dir=None,
             max_episode_steps=max_episode_steps,
         ),
         multistep=MultiStepConfig(
@@ -536,6 +570,7 @@ def run_gr00t_sim_policy(
         wrapper_configs=wrapper_configs,
         n_episodes=n_episodes,
         n_envs=n_envs,
+        video_dir=video_dir,
         algo=algo,
         other_config=other_config,
         n_action_steps=n_action_steps,

@@ -547,7 +547,8 @@ class Gr00tN1d6(PreTrainedModel):
 
         return action_outputs
 
-    def knn_get_action(self, inputs: dict, config: dict) -> BatchFeature:
+
+    def neg_prompt_knn_get_action(self, inputs: dict, config: dict) -> BatchFeature:
         """
         Generate actions using the complete model.
         """
@@ -556,6 +557,49 @@ class Gr00tN1d6(PreTrainedModel):
         contrast_inputs = config['contrast_inputs']
         n_candidates = config['n_candidates']
         print(f"Best-of-N KNN k = {knn_k}")
+        
+        backbone_inputs, action_inputs = self.prepare_input(inputs)
+        backbone_outputs = self.backbone(backbone_inputs)
+        for k in backbone_outputs:
+            backbone_outputs[k] = split_repeat_concat(backbone_outputs[k], n_candidates)
+        for k in action_inputs.keys():
+            if k != 'pixel_values':
+                action_inputs[k] = split_repeat_concat(action_inputs[k], n_candidates)
+        raw_action_outputs = self.action_head.get_action(backbone_outputs, action_inputs)
+
+        # Forward through backbone
+        contrast_backbone_inputs, contrast_action_inputs = self.prepare_input(contrast_inputs)
+        contrast_backbone_outputs = self.backbone(contrast_backbone_inputs)
+        for k in contrast_backbone_outputs:
+            contrast_backbone_outputs[k] = split_repeat_concat(contrast_backbone_outputs[k], n_candidates)
+        for k in contrast_action_inputs.keys():
+            if k != 'pixel_values':
+                contrast_action_inputs[k] = split_repeat_concat(contrast_action_inputs[k], n_candidates)
+        contrast_action_outputs = self.action_head.get_action(contrast_backbone_outputs, contrast_action_inputs)
+
+        assert raw_action_outputs['action_pred'].shape[0] % n_candidates == 0
+        B = raw_action_outputs['action_pred'].shape[0] // n_candidates
+        raw = raw_action_outputs['action_pred'][:,:config['action_horizon'],:7]       # [24, 50, 128]
+        contrast = contrast_action_outputs['action_pred'][:,:config['action_horizon'],:7]
+        raw_action = raw.reshape(int(B), n_candidates, *raw.shape[1:])
+        contrast_action = contrast.reshape(int(B), n_candidates, *contrast.shape[1:])
+
+        all_best_actions = []
+        for i in range(int(B)):
+            best_action = cd_with_knn(raw_action[i], contrast_action[i], knn_k)
+            all_best_actions.append(best_action)
+        best_action = torch.cat(all_best_actions, dim=0)
+        raw_action_outputs['action_pred'] = best_action
+        return raw_action_outputs
+
+    def knn_get_action(self, inputs: dict, config: dict) -> BatchFeature:
+        """
+        Generate actions using the complete model.
+        """
+        # Prepare inputs for backbone and action head
+        knn_k = config['knn_k']
+        contrast_inputs = config['contrast_inputs']
+        n_candidates = config['n_candidates']
         
         backbone_inputs, action_inputs = self.prepare_input(inputs)
         contrast_backbone_inputs, contrast_action_inputs = self.prepare_input(contrast_inputs)
@@ -784,7 +828,7 @@ def cd_with_knn(actions, contrast_actions, knn_k, eps=1e-8):
     return:
         best_action: (1, T, D)
     """
-
+    print(f"Best-of-N KNN k = {knn_k}")
     N = actions.shape[0]
     A = actions.reshape(N, -1).float()              # (N, 28)
     B = contrast_actions.reshape(N, -1).float()     # (N, 28)
@@ -806,7 +850,6 @@ def cd_with_knn(actions, contrast_actions, knn_k, eps=1e-8):
     scores = torch.log(R_B + eps) - torch.log(R_A + eps)  # (N,)
     best_idx = torch.argmax(scores)
 
-    
     best_action = actions[best_idx:best_idx+1]  # (1, T, D)
 
     return best_action

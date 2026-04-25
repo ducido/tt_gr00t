@@ -360,6 +360,8 @@ class Gr00tPolicy(BasePolicy):
             elif collated_inputs['config']['algo'] == 'motion':
                 model_pred = self.model.M_motion_get_action(**collated_inputs)
             elif collated_inputs['config']['algo'] == 'neg_prompt':
+                model_pred = self.model.neg_prompt_knn_get_action(**collated_inputs)
+            elif collated_inputs['config']['algo'] == 'masking_state':
                 model_pred = self.model.knn_get_action(**collated_inputs)
             else:
                 model_pred = self.model.get_action(**collated_inputs)
