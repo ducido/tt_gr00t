@@ -301,7 +301,7 @@ def run_rollout_gymnasium_policy(
     episode_infos = defaultdict(list)
 
     #######
-    if algo == 'knn':
+    if algo in ['knn', 'pcd', 'masking_image_neg_prompt_masking_state']:
         other_config['env'] = env
         temp_config = {k:v for k, v in other_config.items() if k not in ['n_candidates', 'knn_k', 'long_ah']}
         contrast_image_generator = get_contrast_image_generator(temp_config)
@@ -310,7 +310,7 @@ def run_rollout_gymnasium_policy(
     #######
 
     # Initial reset
-    observations, _ = env.reset() # odict_keys(['annotation.human.action.task_description', 'state.gripper', 'state.pad', 'state.pitch', 'state.roll', 'state.x', 'state.y', 'state.yaw', 'state.z', 'video.image_0'])
+    observations, _ = env.reset() # dict_keys(['annotation.human.action.task_description', 'state.gripper', 'state.pad', 'state.pitch', 'state.roll', 'state.x', 'state.y', 'state.yaw', 'state.z', 'video.image_0'])
     observations_copy = copy.deepcopy(observations)
     policy.reset()
     i = 0
@@ -319,17 +319,55 @@ def run_rollout_gymnasium_policy(
     while completed_episodes < n_episodes:
         if algo == 'knn':
             all_contrast_images = []
+            for i in range(len(observations_copy['video.image_0'])):
+                observations_copy['video.single_image_0'] = observations_copy['video.image_0'][i]
+                contrast_image = contrast_image_generator.generate(observations_copy, observations_copy['annotation.human.action.task_description'][0], is_inpaint=False)
+                all_contrast_images.append(contrast_image)
+            all_contrast_images = np.stack(all_contrast_images)[:,None,:,:,:]
+
+            contrast_observations = {k:v for k, v in observations_copy.items()}
+            contrast_observations['video.image_0'] = all_contrast_images
+            actions, _ = policy.get_action(observations, options={'algo': algo, 'n_candidates': other_config['n_candidates'], 'knn_k': other_config['knn_k'], 'contrast_inputs': contrast_observations, 'action_horizon': n_action_steps})
+        elif algo == 'pcd':
+            all_contrast_images = []
+            for i in range(len(observations['video.image_0'])):
+                observations['video.single_image_0'] = observations['video.image_0'][i]
+                contrast_image = contrast_image_generator.generate(observations, observations['annotation.human.action.task_description'][0], is_inpaint=True)
+                all_contrast_images.append(contrast_image)
+            all_contrast_images = np.stack(all_contrast_images)[:,None,:,:,:]
+
+            contrast_observations = {k:v for k, v in observations_copy.items()}
+            contrast_observations['video.image_0'] = all_contrast_images
+            actions, _ = policy.get_action(observations, options={'algo': algo, 'n_candidates': other_config['n_candidates'], 'contrast_inputs': contrast_observations, 'action_horizon': n_action_steps, 'alpha': 0.2, 'bandwidth_factor': 1.0, 'keep_threshold': 0.5})
+        elif algo == 'motion':
+            actions, _ = policy.get_action(observations, options={'algo': algo, 'n_candidates': other_config['n_candidates'] ,'long_ah': other_config['long_ah'], 'short_ah': n_action_steps})
+        elif algo == 'neg_prompt':
+            contrast_observations = {k:v for k, v in observations_copy.items()}
+            contrast_observations['annotation.human.action.task_description'] = ('do nothing, just stand still',) * len(observations['annotation.human.action.task_description'])
+            actions, _ = policy.get_action(observations, options={'algo': algo, 'n_candidates': other_config['n_candidates'], 'knn_k': other_config['knn_k'], 'contrast_inputs': contrast_observations, 'action_horizon': n_action_steps})
+        elif algo == 'masking_state':
+            contrast_observations = {k:v for k, v in observations_copy.items()}
+            for k in contrast_observations:
+                if 'state' in k:
+                    # contrast_observations[k] = np.zeros_like(contrast_observations[k])
+                    contrast_observations[k] = np.random.randn(*contrast_observations[k].shape)
+            actions, _ = policy.get_action(observations, options={'algo': algo, 'n_candidates': other_config['n_candidates'], 'knn_k': other_config['knn_k'], 'contrast_inputs': contrast_observations, 'action_horizon': n_action_steps})
+        elif algo == 'masking_image_neg_prompt_masking_state':
+            all_contrast_images = []
             for i in range(len(observations['video.image_0'])):
                 observations['video.single_image_0'] = observations['video.image_0'][i]
                 contrast_image = contrast_image_generator.generate(observations, observations['annotation.human.action.task_description'][0], is_inpaint=False)
                 all_contrast_images.append(contrast_image)
             all_contrast_images = np.stack(all_contrast_images)[:,None,:,:,:]
 
-            contrast_observations = {k:v for k, v in observations.items()}
+            contrast_observations = {k:v for k, v in observations_copy.items()}
             contrast_observations['video.image_0'] = all_contrast_images
+            contrast_observations['annotation.human.action.task_description'] = ['do nothing, just stand still'] * len(observations['annotation.human.action.task_description'])
+            for k in contrast_observations:
+                if 'state' in k:
+                    # contrast_observations[k] = np.zeros_like(contrast_observations[k])
+                    contrast_observations[k] = np.random.randn(*contrast_observations[k].shape)
             actions, _ = policy.get_action(observations, options={'algo': algo, 'n_candidates': other_config['n_candidates'], 'knn_k': other_config['knn_k'], 'contrast_inputs': contrast_observations, 'action_horizon': n_action_steps})
-        elif algo == 'motion':
-            actions, _ = policy.get_action(observations, options={'algo': algo, 'n_candidates': other_config['n_candidates'] ,'long_ah': other_config['long_ah'], 'short_ah': n_action_steps})
         else:
             actions, _ = policy.get_action(observations, options={'algo': algo, 'action_horizon': n_action_steps})
 
@@ -547,7 +585,7 @@ if __name__ == "__main__":
         import sys
         sys.path.append('/projects/extern/kisski/kisski-spath/dir.project/VLA_Imit/Isaac-GR00T')
         from contrast_utils import get_contrast_image_generator
-        import re 
+        import re
 
         CONTRAST_IMAGE_CONFIG = dict(
             camera_name=None,
@@ -591,6 +629,10 @@ if __name__ == "__main__":
         # config['env'] = env
         # contrast_image_generator = get_contrast_image_generator(config)
     ###
+
+    if args.algo == 'pcd':
+        from contrast_utils.kde_contrast_decoding import ContrastDecoding
+
 
     results = run_gr00t_sim_policy(
         env_name=args.env_name,

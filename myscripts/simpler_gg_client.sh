@@ -1,5 +1,5 @@
 
-export CUDA_VISIBLE_DEVICES=3
+export CUDA_VISIBLE_DEVICES=1
 
 TASKS=(
   simpler_env_google/google_robot_close_drawer
@@ -11,34 +11,32 @@ TASKS=(
 
 
 
-LOG_DIR="eval_logs/simpler_env/baseline_nas4"
-mkdir -p "$LOG_DIR"
+action_horizon=10
+EPISODES=50
+N_envs=1
+
 
 for TASK in "${TASKS[@]}"; do
     NAME=$(basename "$TASK")
 
+    LOG_DIR="eval_logs/google_simpler_env/baseline_nenvs${N_envs}_eps${EPISODES}_ah${action_horizon}_seed2/$NAME"
+    VIDEO_DIR="$LOG_DIR/videos"
+    mkdir -p "$LOG_DIR"
+    mkdir -p "$VIDEO_DIR"
+
     echo "Running task: $TASK"
 
     gr00t/eval/sim/SimplerEnv/simpler_uv/.venv/bin/python gr00t/eval/rollout_policy.py \
-        --n_episodes 100 \
+        --n_episodes $EPISODES \
         --policy_client_host 127.0.0.1 \
-        --policy_client_port 5555 \
+        --policy_client_port 5556 \
         --max_episode_steps=300 \
         --env_name "$TASK" \
-        --n_action_steps 4 \
-        --n_envs 5 \
+        --n_action_steps $action_horizon \
+        --n_envs $N_envs \
+        --video_dir "$VIDEO_DIR" \
         > "$LOG_DIR/${NAME}.txt" 2>&1
 
     echo "Finished task: $TASK"
     echo ""
 done
-
-
-# gr00t/eval/sim/SimplerEnv/simpler_uv/.venv/bin/python gr00t/eval/rollout_policy.py \
-#     --n_episodes 10 \
-#     --policy_client_host 127.0.0.1 \
-#     --policy_client_port 5555 \
-#     --max_episode_steps=300 \
-#     --env_name simpler_env_google/google_robot_pick_coke_can \
-#     --n_action_steps 1 \
-#     --n_envs 5

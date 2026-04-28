@@ -1,5 +1,5 @@
 
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=1
 
 TASKS=(
   simpler_env_widowx/widowx_carrot_on_plate
@@ -12,7 +12,7 @@ action_horizon=10
 EPISODES=50
 N_envs=1
 
-knn=3
+knn=10
 n_candidates=24
 search_opts="by grounded_sam_tracking alpha 0.2 num_repeats 24 n_candidates $n_candidates knn_k $knn"
 
@@ -28,7 +28,7 @@ for TASK in "${TASKS[@]}"; do
 
     echo "Running task: $TASK"
 
-    gr00t/eval/sim/SimplerEnv/simpler_uv/.venv/bin/python gr00t/eval/rollout_policy.py \
+    gr00t/eval/sim/SimplerEnv/simpler_uv/.venv/bin/python gr00t/eval/rollout_policy_add_gif.py \
         --algo "masking_state" \
         --search_opts $search_opts \
         --n_episodes $EPISODES \

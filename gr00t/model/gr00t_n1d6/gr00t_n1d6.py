@@ -515,7 +515,7 @@ class Gr00tN1d6(PreTrainedModel):
 
         return action_outputs
 
-    def get_action(self, inputs: dict, n_action_steps: int) -> BatchFeature:
+    def get_action(self, inputs: dict, config: dict) -> BatchFeature:
         """
         Generate actions using the complete model.
         """

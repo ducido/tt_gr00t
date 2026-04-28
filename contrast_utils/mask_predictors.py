@@ -11,7 +11,7 @@ from .utils import *
 _CLASSNAMES = ['robot', 'coke can', 'pepsi can', 'redbull can', '7up can', 'blue plastic bottle', 
                'apple', 'orange', 'sponge', 'bottom drawer', 'middle drawer', 'top drawer',
                'eggplant', 'spoon', 'carrot', 'plate larger', 'table cloth shorter', 
-               'yellow basket', 'green cube', 'yellow cube', 'goal_site']
+               'yellow basket', 'green cube', 'yellow cube', 'goal_site', 'sprite can']
 
 _BACKGROUND_CLASSNAMES = ['floor', 'wall', 'ceiling']
 

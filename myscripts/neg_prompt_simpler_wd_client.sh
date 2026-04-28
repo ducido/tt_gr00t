@@ -1,5 +1,5 @@
 
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=0
 
 TASKS=(
   simpler_env_widowx/widowx_carrot_on_plate
