@@ -1,5 +1,7 @@
 
 export CUDA_VISIBLE_DEVICES=0
+module load gcc/13.2.0
+module load ffmpeg/7.0.2
 
 TASKS=(
   simpler_env_google/google_robot_close_drawer
@@ -9,7 +11,7 @@ TASKS=(
   simpler_env_google/google_robot_place_in_closed_drawer
 )
 
-action_horizon=10
+action_horizon=4
 EPISODES=50
 N_envs=1
 
@@ -33,7 +35,7 @@ for TASK in "${TASKS[@]}"; do
         --search_opts $search_opts \
         --n_episodes $EPISODES \
         --policy_client_host 127.0.0.1 \
-        --policy_client_port 5556 \
+        --policy_client_port 5510 \
         --max_episode_steps=300 \
         --env_name "$TASK" \
         --n_action_steps $action_horizon \

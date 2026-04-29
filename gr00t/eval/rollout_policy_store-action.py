@@ -17,7 +17,7 @@ import numpy as np
 from tqdm import tqdm
 import torch
 import mediapy
-def write_video(images, path, fps=10):
+def write_video(images, path, fps=5):
     mediapy.write_video(path, images, fps=fps, codec='gif')
 
 def tile_images(images):
@@ -349,6 +349,17 @@ def run_rollout_gymnasium_policy(
     policy.reset()
     i = 0
     frames = []
+    store_action = []
+
+    KEY_ORDER = [
+        'state.x', 'state.y', 'state.z',
+        'state.roll', 'state.pitch', 'state.yaw',
+        'state.gripper'
+    ]
+    each_timestep = {}
+    for k in KEY_ORDER:
+        each_timestep[k.replace('state', 'action')] = observations[k]
+    store_action.append(each_timestep)
 
     pbar = tqdm(total=n_episodes, desc="Episodes")
     while completed_episodes < n_episodes:
@@ -384,11 +395,6 @@ def run_rollout_gymnasium_policy(
 
             contrast_observations = {k:v for k, v in observations.items()}
             contrast_observations[image_key] = all_contrast_images
-
-            #### for visualize
-            frames.append(tile_images([observations[image_key][0][0], contrast_observations[image_key][0][0]]))  
-            ####
-            
             actions, _ = policy.get_action(observations, options={'algo': algo, 'n_candidates': other_config['n_candidates'], 'contrast_inputs': contrast_observations, 'action_horizon': n_action_steps, 'alpha': 0.2, 'bandwidth_factor': 1.0, 'keep_threshold': 0.5})
         elif algo == 'motion':
             actions, _ = policy.get_action(observations, options={'algo': algo, 'n_candidates': other_config['n_candidates'] ,'long_ah': other_config['long_ah'], 'short_ah': n_action_steps})
@@ -466,6 +472,15 @@ def run_rollout_gymnasium_policy(
             })
         else:
             actions, _ = policy.get_action(observations, options={'algo': algo, 'action_horizon': n_action_steps})
+
+            for n in range(n_action_steps):
+                each_timestep = {}
+                for k in actions:
+                    each_timestep[k] = actions[k][:,n:n+1]
+                store_action.append(each_timestep)
+            
+            for k in actions:
+                actions[k] += np.random.randn(*actions[k].shape) * 0.01
             
 
         # print(actions.keys()) # dict_keys(['action.x', 'action.y', 'action.z', 'action.roll', 'action.pitch', 'action.yaw', 'action.gripper'])
@@ -539,7 +554,11 @@ def run_rollout_gymnasium_policy(
                 current_rewards[env_idx] = 0
                 current_lengths[env_idx] = 0
 
+                # save_action_history(store_action, f"/projects/extern/kisski/kisski-spath/dir.project/VLA_Imit/Isaac-GR00T/action_history/{completed_episodes}.txt")
+                # store_action = []
                 ## reset visualize gif env_infos["final_info"][env_idx]["success"]
+                
+
                 if args.algo in ['knn', 'pcd', 'knn_motion_in_B', 'knn_motion_setC_inA']:
                     success = env_infos["final_info"][env_idx]["success"][-1]
                     write_video(frames, f"{video_dir}/episode_{completed_episodes-1}_success_{success}.gif")
@@ -619,7 +638,7 @@ def run_gr00t_sim_policy(
             video_dir = f"/tmp/sim_eval_videos_{env_name}_ac{n_action_steps}_{uuid.uuid4()}"
     wrapper_configs = WrapperConfigs(
         video=VideoConfig(
-            video_dir=None,
+            video_dir=video_dir,
             max_episode_steps=max_episode_steps,
         ),
         multistep=MultiStepConfig(

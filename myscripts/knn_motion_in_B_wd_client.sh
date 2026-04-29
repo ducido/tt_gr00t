@@ -1,22 +1,31 @@
 
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=3
+module load gcc/13.2.0
+module load ffmpeg/7.0.2
 
 TASKS=(
-#   simpler_env_widowx/widowx_carrot_on_plate
-#   simpler_env_widowx/widowx_put_eggplant_in_basket
+  simpler_env_widowx/widowx_carrot_on_plate
+  simpler_env_widowx/widowx_put_eggplant_in_basket
   simpler_env_widowx/widowx_spoon_on_towel
-#   simpler_env_widowx/widowx_stack_cube
+  simpler_env_widowx/widowx_stack_cube
 )
 
 action_horizon=4
-EPISODES=1
+EPISODES=50
 N_envs=1
+
+knn=5
+n_candidates=24
+m_motion_in_B=10
+long_ah=10
+search_opts="by grounded_sam_tracking alpha 0.2 num_repeats 24 n_candidates $n_candidates knn_k $knn m_motion_in_B $m_motion_in_B long_ah $long_ah"
+
 
 
 for TASK in "${TASKS[@]}"; do
     NAME=$(basename "$TASK")
 
-    LOG_DIR="eval_logs/simpler_env/baseline_nenvs${N_envs}_eps${EPISODES}_ah${action_horizon}_add_noise/$NAME"
+    LOG_DIR="eval_logs/simpler_env/knn_${knn}_motion_in_B_bbox_zero_m_${m_motion_in_B}_ah_${action_horizon}_long_ah_${long_ah}_candidates_${n_candidates}/$NAME"
     VIDEO_DIR="$LOG_DIR/videos"
     mkdir -p "$LOG_DIR"
     mkdir -p "$VIDEO_DIR"
@@ -24,15 +33,17 @@ for TASK in "${TASKS[@]}"; do
     echo "Running task: $TASK"
 
     gr00t/eval/sim/SimplerEnv/simpler_uv/.venv/bin/python gr00t/eval/rollout_policy.py \
+        --algo "knn_motion_in_B" \
+        --search_opts $search_opts \
         --n_episodes $EPISODES \
         --policy_client_host 127.0.0.1 \
         --policy_client_port 5556 \
-        --max_episode_steps=600 \
+        --max_episode_steps=300 \
         --env_name "$TASK" \
         --n_action_steps $action_horizon \
         --n_envs $N_envs \
-        --video_dir "$VIDEO_DIR" # \
-        #> "$LOG_DIR/${NAME}.txt" 2>&1
+        --video_dir "$VIDEO_DIR" \
+       > "$LOG_DIR/${NAME}.txt" 2>&1
 
     echo "Finished task: $TASK"
     echo ""

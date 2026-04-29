@@ -243,6 +243,7 @@ class Gr00tN1d6Processor(BaseProcessor):
         joint_groups = self.modality_configs[embodiment_tag.value]["action"].modality_keys
         # action_horizon = len(self.modality_configs[embodiment_tag.value]["action"].delta_indices)
         action_horizon = n_action_steps
+
         for key in joint_groups:
             joint_dim = self.state_action_processor.norm_params[embodiment_tag.value]["action"][
                 key

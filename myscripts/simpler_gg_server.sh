@@ -12,4 +12,4 @@ module load cuda/12.6.2
     --model-path CP/GR00T-N1.6-fractal \
     --embodiment-tag OXE_GOOGLE \
     --use-sim-policy-wrapper \
-    --port 5556
+    --port 5510

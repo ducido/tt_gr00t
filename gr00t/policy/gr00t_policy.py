@@ -365,9 +365,52 @@ class Gr00tPolicy(BasePolicy):
                 model_pred = self.model.knn_get_action(**collated_inputs)
             elif collated_inputs['config']['algo'] == 'image_prompt_state':
                 model_pred = self.model.neg_prompt_knn_get_action(**collated_inputs)
+            elif collated_inputs['config']['algo'] == 'knn_motion_in_B':
+                model_pred = self.model.knn_motion_in_B_get_action(**collated_inputs)
+            elif collated_inputs['config']['algo'] == 'knn_motion_setC_inA':
+                model_pred = self.model.knn_motion_setC_inA_get_action(**collated_inputs)
             else:
                 model_pred = self.model.get_action(**collated_inputs)
-        normalized_action = model_pred["action_pred"].float()
+        normalized_action = model_pred["action_pred"].float() # 1,50,128
+
+        print(normalized_action.shape)
+
+        ########### Save action
+        # KEY_ORDER = [
+        #     'action.x', 'action.y', 'action.z',
+        #     'action.roll', 'action.pitch', 'action.yaw',
+        #     'action.gripper'
+        # ]
+        # store_action = []
+        # sample = {}
+        # for k, dim in zip(KEY_ORDER, range(7)):
+        #     sample[k] = normalized_action[:, :, dim:dim+1].cpu().numpy().astype(np.float32)
+        # print(sample.keys())
+        # breakpoint()
+        # for i in range(50):
+        #     temp = {}
+        #     for k in KEY_ORDER:
+        #         temp[k] = sample[k][:, i:i+1]
+        #     store_action.append(temp)
+
+        # folder = '/projects/extern/kisski/kisski-spath/dir.project/VLA_Imit/Isaac-GR00T/action_history/local/'
+        # import os
+        # idx = len(os.listdir(folder))
+        # file_path = os.path.join(folder, f"chunk_{idx}.txt")
+        # with open(file_path, "w") as f:
+        #     for timestep in store_action:
+        #         line_dict = {}
+                
+        #         for k, v in timestep.items():
+        #             # v shape: (1, 1) hoặc (1, 1, 1)
+        #             val = float(v.squeeze().item())
+                    
+        #             line_dict[k] = np.array([val], dtype=np.float32)
+                
+        #         f.write(str(line_dict) + "\n")
+
+        ##########
+
 
         # Step 5: Decode actions from normalized space back to physical units
         batched_states = {}
@@ -375,7 +418,7 @@ class Gr00tPolicy(BasePolicy):
             batched_states[k] = np.stack([s[k] for s in states], axis=0)  # (B, T, D)
 
         unnormalized_action = self.processor.decode_action(
-            normalized_action.cpu().numpy(), self.embodiment_tag, batched_states, n_action_steps=options.get('n_action_steps')
+            normalized_action.cpu().numpy(), self.embodiment_tag, batched_states, n_action_steps=options.get('action_horizon')
         )
         
         # Cast all actions to float32 for consistency

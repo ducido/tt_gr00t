@@ -439,10 +439,11 @@ class StateActionProcessor:
 
         # Step 2: Convert relative actions to absolute (if needed)
         action_configs = self.modality_configs[embodiment_tag]["action"].action_configs
-
         if action_configs is not None:
             for key, action_config in zip(modality_keys, action_configs):
                 if action_config.rep == ActionRepresentation.RELATIVE and self.use_relative_action:
+                    print("NOOOOOOOO")
+                    breakpoint()
                     if state is None:
                         raise ValueError(
                             f"State dict required for relative->absolute conversion of key '{key}' "
