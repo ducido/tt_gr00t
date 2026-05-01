@@ -375,8 +375,6 @@ class Gr00tPolicy(BasePolicy):
                 model_pred = self.model.get_action(**collated_inputs)
         normalized_action = model_pred["action_pred"].float() # 1,50,128
 
-        print(normalized_action.shape)
-
         ########### Save action
         # KEY_ORDER = [
         #     'action.x', 'action.y', 'action.z',

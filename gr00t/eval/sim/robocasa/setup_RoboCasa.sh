@@ -32,6 +32,8 @@ uv pip install gymnasium==0.29.1 pydantic av==15.0.0 zmq transformers==4.51.3 ms
 
 # Make your project importable in this venv without re-resolving deps
 uv pip install --editable "$PROJECT_REPO" --no-deps
+uv pip install omegaconf albumentations==0.5.2 webdataset scikit-image easydict scikit-learn pandas lightning kornia
+uv pip install -r third_party/inpaint_anything/lama/requirements.txt
 
 # Stable headless timestep (optional but recommended)
 # python - <<'PY'

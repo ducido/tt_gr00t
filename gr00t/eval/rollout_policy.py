@@ -494,9 +494,7 @@ def run_rollout_gymnasium_policy(
         # print(actions.keys()) # dict_keys(['action.x', 'action.y', 'action.z', 'action.roll', 'action.pitch', 'action.yaw', 'action.gripper'])
         # print(actions['action.x'].shape) (1, 50, 1)
         # breakpoint()
-        # atv = compute_atv(actions)
-        # jerk = compute_jerk(actions)
-        # print(f"ATV: {atv}, JERK: {jerk}")
+        
         next_obs, rewards, terminations, truncations, env_infos = env.step(actions)
         # NOTE (FY): Currently we don't properly handle policy reset. For now, our policy are stateless,
         # but in the future if we need policy to be stateful, we need to detect env reset and call policy.reset()
