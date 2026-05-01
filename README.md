@@ -29,6 +29,7 @@ bash myscript/base_wd.sh 5555
 ```
 git clone https://github.com/squarefk/robocasa external_dependencies/robocasa
 bash gr00t/eval/sim/robocasa/setup_RoboCasa.sh
+git clone https://huggingface.co/nvidia/GR00T-N1.6-3B CP/GR00T-N1.6-3B
 ```
 
 ```bash
