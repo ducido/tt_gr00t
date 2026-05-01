@@ -4,11 +4,11 @@ module load gcc/13.2.0
 module load ffmpeg/7.0.2
 
 TASKS=(
-  # simpler_env_google/google_robot_close_drawer
-  # simpler_env_google/google_robot_move_near
-  # simpler_env_google/google_robot_open_drawer
-  simpler_env_google/google_robot_pick_coke_can
-  simpler_env_google/google_robot_place_in_closed_drawer
+  simpler_env_google/google_robot_close_drawer
+  simpler_env_google/google_robot_move_near
+  simpler_env_google/google_robot_open_drawer
+  # simpler_env_google/google_robot_pick_coke_can
+  # simpler_env_google/google_robot_place_in_closed_drawer
 )
 
 action_horizon=1
@@ -24,7 +24,7 @@ search_opts="by grounded_sam_tracking alpha 0.2 num_repeats 24 n_candidates $n_c
 for TASK in "${TASKS[@]}"; do
     NAME=$(basename "$TASK")
 
-    LOG_DIR="eval_logs/google_simpler_env/knn_bbox_zero_${knn}_ah_${action_horizon}_candidates_${n_candidates}/$NAME"
+    LOG_DIR="eval_logs/google_simpler_env/center_2-3_knn_bbox_zero_${knn}_ah_${action_horizon}_candidates_${n_candidates}/$NAME"
     VIDEO_DIR="$LOG_DIR/videos"
     mkdir -p "$LOG_DIR"
     mkdir -p "$VIDEO_DIR"

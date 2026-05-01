@@ -5,21 +5,21 @@ module load ffmpeg/7.0.2
 
 
 TASKS=(
-  # simpler_env_google/google_robot_close_drawer
-  # simpler_env_google/google_robot_move_near
-  # simpler_env_google/google_robot_open_drawer
+  simpler_env_google/google_robot_close_drawer
+  simpler_env_google/google_robot_move_near
+  simpler_env_google/google_robot_open_drawer
   simpler_env_google/google_robot_pick_coke_can
   simpler_env_google/google_robot_place_in_closed_drawer
 )
 
 
-action_horizon=10
+action_horizon=1
 EPISODES=50
 N_envs=1
 
 knn=10
-n_candidates=24
-m_motion_in_B=12
+n_candidates=12
+m_motion_in_B=5
 search_opts="by grounded_sam_tracking alpha 0.2 num_repeats 24 n_candidates $n_candidates knn_k $knn m_motion_in_B $m_motion_in_B"
 
 

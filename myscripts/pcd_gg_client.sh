@@ -11,7 +11,7 @@ TASKS=(
   simpler_env_google/google_robot_place_in_closed_drawer
 )
 
-action_horizon=4
+action_horizon=1
 EPISODES=50
 N_envs=1
 
@@ -23,7 +23,7 @@ search_opts="by grounded_sam_tracking alpha 0.2 num_repeats 24 n_candidates $n_c
 for TASK in "${TASKS[@]}"; do
     NAME=$(basename "$TASK")
 
-    LOG_DIR="eval_logs/google_simpler_env/pcd_ah_${action_horizon}_candidates_${n_candidates}_2nd/$NAME"
+    LOG_DIR="eval_logs/google_simpler_env/pcd_ah_${action_horizon}_candidates_${n_candidates}/$NAME"
     VIDEO_DIR="$LOG_DIR/videos"
     mkdir -p "$LOG_DIR"
     mkdir -p "$VIDEO_DIR"
@@ -35,7 +35,7 @@ for TASK in "${TASKS[@]}"; do
         --search_opts $search_opts \
         --n_episodes $EPISODES \
         --policy_client_host 127.0.0.1 \
-        --policy_client_port 5510 \
+        --policy_client_port 5511 \
         --max_episode_steps=300 \
         --env_name "$TASK" \
         --n_action_steps $action_horizon \

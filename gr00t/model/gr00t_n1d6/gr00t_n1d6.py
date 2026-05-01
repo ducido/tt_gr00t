@@ -592,6 +592,63 @@ class Gr00tN1d6(PreTrainedModel):
         raw_action_outputs['action_pred'] = best_action
         return raw_action_outputs
 
+    def knn_topK_motion_get_action(self, inputs: dict, config: dict) -> BatchFeature:
+        """
+        Generate actions using the complete model.
+        """
+        # Prepare inputs for backbone and action head
+        knn_k = config['knn_k']
+        top_k = config['top_k']
+        contrast_inputs = config['contrast_inputs']
+        n_candidates = config['n_candidates']
+        
+        backbone_inputs, action_inputs = self.prepare_input(inputs)
+        contrast_backbone_inputs, contrast_action_inputs = self.prepare_input(contrast_inputs)
+
+        # Forward through backbone
+        backbone_outputs = self.backbone(backbone_inputs)
+        contrast_backbone_outputs = self.backbone(contrast_backbone_inputs)
+
+        # concat dim=0 backbone_outputs
+        for k in backbone_outputs.keys():
+            x = torch.cat(
+                [backbone_outputs[k], contrast_backbone_outputs[k]],
+                dim=0
+            )
+            backbone_outputs[k] = split_repeat_concat(x, n_candidates)
+
+        for k in action_inputs.keys():
+            if k != 'pixel_values':
+                x = torch.cat([action_inputs[k], contrast_action_inputs[k]], dim=0)
+                action_inputs[k] = split_repeat_concat(x, n_candidates)
+            else:
+                action_inputs[k] = action_inputs[k] + contrast_action_inputs[k]
+
+        action_outputs = self.action_head.get_action(backbone_outputs, action_inputs)
+
+        raw_action_outputs = {}
+        contrast_action_outputs = {}
+        for k in action_outputs.keys():
+            raw_action_outputs[k], contrast_action_outputs[k] = torch.chunk(action_outputs[k], 2, dim=0)
+
+        assert raw_action_outputs['action_pred'].shape[0] % n_candidates == 0
+        B = raw_action_outputs['action_pred'].shape[0] // n_candidates
+        raw = raw_action_outputs['action_pred'][:,:config['action_horizon'],:7]       # [24, 50, 128]
+        contrast = contrast_action_outputs['action_pred'][:,:config['action_horizon'],:7]
+        raw_action = raw.reshape(int(B), n_candidates, *raw.shape[1:])
+        contrast_action = contrast.reshape(int(B), n_candidates, *contrast.shape[1:])
+
+        all_best_actions = []
+        for i in range(int(B)):
+            top_K_best_action, top_scores = cd_with_knn_topK(raw_action[i], contrast_action[i], knn_k, top_k)
+            best_action, jerk_rms = jerk_smoothest_action(top_K_best_action)
+            print(jerk_rms)
+            all_best_actions.append(best_action)
+        best_action = torch.cat(all_best_actions, dim=0)
+        raw_action_outputs['action_pred'] = best_action
+        return raw_action_outputs
+
+
     def knn_get_action(self, inputs: dict, config: dict) -> BatchFeature:
         """
         Generate actions using the complete model.
@@ -644,6 +701,7 @@ class Gr00tN1d6(PreTrainedModel):
         best_action = torch.cat(all_best_actions, dim=0)
         raw_action_outputs['action_pred'] = best_action
         return raw_action_outputs
+
 
 
     def knn_motion_in_B_get_action(self, inputs: dict, config: dict) -> BatchFeature:
@@ -857,42 +915,6 @@ class Gr00tN1d6(PreTrainedModel):
         short_action = action_outputs['action_pred'][:,:config['short_ah'],:7]
         print(long_action.shape, short_action.shape)
 
-        def jerk_smoothest_action(long_action):
-            """
-            long_action: torch.Tensor of shape (C, T, D)
-
-            Returns:
-                best_idx: int
-                best_action: (T, D)
-                jerk_rms: (C,)
-            """
-            assert long_action.ndim == 3
-            C, T, D = long_action.shape
-            assert T >= 4, "Need at least 4 timesteps to compute jerk"
-
-            # Normalize long_action
-            std = long_action.std(dim=(0,1), keepdim=True)
-            norm_long_action = long_action / (std + 1e-6)
-
-            # Compute jerk (C, T-3, D)
-            jerk = (
-                norm_long_action[:, 3:, :-1]
-                - 3 * norm_long_action[:, 2:-1, :-1]
-                + 3 * norm_long_action[:, 1:-2, :-1]
-                - norm_long_action[:, :-3, :-1]
-            )
-
-            # ||j||^2 over action dim → (C, T-3)
-            jerk_sq = (jerk ** 2).sum(dim=-1)
-            # mean over time → (C,)
-            jerk_mean = jerk_sq.mean(dim=1)
-            # RMS → (C,)
-            jerk_rms = torch.sqrt(jerk_mean + 1e-8)  # tránh nan
-            # best candidate
-            best_idx = torch.argmin(jerk_rms)
-            best_action = long_action[best_idx:best_idx+1]
-            return best_action
-
         best_smooth_long_action = jerk_smoothest_action(long_action)
 
         def select_best_from_N(short_action, best_smooth_long_action, short_ah):
@@ -977,6 +999,45 @@ def cd_with_knn(actions, contrast_actions, knn_k, eps=1e-8):
     best_action = actions[best_idx:best_idx+1]
 
     return best_action
+
+
+def cd_with_knn_topK(actions, contrast_actions, knn_k, top_k, eps=1e-8):
+    """
+    actions: (N, T, D)
+    contrast_actions: (C, T, D)
+
+    return:
+        best_action: (1, T, D)
+    """
+    print(f"Best-of-N KNN k = {knn_k}")
+
+    N = actions.shape[0]
+    C = contrast_actions.shape[0]
+
+    A = actions.reshape(N, -1).float()  # (N, TD)
+    B = contrast_actions.reshape(C, -1).float()  # (C, TD)
+
+    # kNN in B
+    dist_AB = torch.cdist(A, B, p=2) ** 2   # (N, C)
+    knn_dist_AB, _ = torch.topk(dist_AB, k=knn_k, largest=False, dim=1)
+    R_B = knn_dist_AB.sum(dim=1)  # (N,)
+
+    # kNN in A (exclude self)
+    dist_AA = torch.cdist(A, A, p=2) ** 2   # (N, N)
+    inf_mask = torch.eye(N, device=A.device) * 1e9
+    dist_AA = dist_AA + inf_mask
+    knn_dist_AA, _ = torch.topk(dist_AA, k=knn_k, largest=False, dim=1)
+    R_A = knn_dist_AA.sum(dim=1)  # (N,)
+
+    # score
+    scores = torch.log(R_B + eps) - torch.log(R_A + eps)
+
+    # lấy top K
+    top_scores, top_indices = torch.topk(scores, k=top_k, largest=True)
+
+    top_actions = actions[top_indices]  # (top_k, T, D)
+
+    return top_actions, top_scores
 
 def cd_with_knn_setC(actions, contrast_actions_B, contrast_actions_C, knn_k, eps=1e-8):
     """
@@ -1206,3 +1267,40 @@ def top_M_jerk_action2(long_action, M):
     remain_actions = long_action[mask]
 
     return top_actions, remain_actions
+
+
+def jerk_smoothest_action(long_action):
+    """
+    long_action: torch.Tensor of shape (C, T, D)
+
+    Returns:
+        best_idx: int
+        best_action: (T, D)
+        jerk_rms: (C,)
+    """
+    assert long_action.ndim == 3
+    C, T, D = long_action.shape
+    assert T >= 4, "Need at least 4 timesteps to compute jerk"
+
+    # Normalize long_action
+    std = long_action.std(dim=(0,1), keepdim=True)
+    norm_long_action = long_action / (std + 1e-6)
+
+    # Compute jerk (C, T-3, D)
+    jerk = (
+        norm_long_action[:, 3:, :-1]
+        - 3 * norm_long_action[:, 2:-1, :-1]
+        + 3 * norm_long_action[:, 1:-2, :-1]
+        - norm_long_action[:, :-3, :-1]
+    )
+
+    # ||j||^2 over action dim → (C, T-3)
+    jerk_sq = (jerk ** 2).sum(dim=-1)
+    # mean over time → (C,)
+    jerk_mean = jerk_sq.mean(dim=1)
+    # RMS → (C,)
+    jerk_rms = torch.sqrt(jerk_mean + 1e-8)  # tránh nan
+    # best candidate
+    best_idx = torch.argmin(jerk_rms)
+    best_action = long_action[best_idx:best_idx+1]
+    return best_action, jerk_rms

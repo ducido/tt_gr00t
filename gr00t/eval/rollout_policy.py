@@ -336,9 +336,9 @@ def run_rollout_gymnasium_policy(
     episode_infos = defaultdict(list)
 
     #######
-    if algo in ['knn', 'pcd', 'image_prompt_state', 'knn_motion_in_B', 'knn_motion_setC_inA']:
+    if algo in ['knn', 'pcd', 'image_prompt_state', 'knn_motion_in_B', 'knn_motion_setC_inA', 'knn_topK_motion']:
         other_config['env'] = env
-        temp_config = {k:v for k, v in other_config.items() if k not in ['n_candidates', 'knn_k', 'long_ah', 'm_motion_in_B']}
+        temp_config = {k:v for k, v in other_config.items() if k not in ['n_candidates', 'knn_k', 'long_ah', 'm_motion_in_B', 'top_k']}
         contrast_image_generator = get_contrast_image_generator(temp_config)
         contrast_image_generator.reset()
 
@@ -388,7 +388,7 @@ def run_rollout_gymnasium_policy(
             #### for visualize
             frames.append(tile_images([observations[image_key][0][0], contrast_observations[image_key][0][0]]))  
             ####
-            
+
             actions, _ = policy.get_action(observations, options={'algo': algo, 'n_candidates': other_config['n_candidates'], 'contrast_inputs': contrast_observations, 'action_horizon': n_action_steps, 'alpha': 0.2, 'bandwidth_factor': 1.0, 'keep_threshold': 0.5})
         elif algo == 'motion':
             actions, _ = policy.get_action(observations, options={'algo': algo, 'n_candidates': other_config['n_candidates'] ,'long_ah': other_config['long_ah'], 'short_ah': n_action_steps})
@@ -463,6 +463,29 @@ def run_rollout_gymnasium_policy(
                 'contrast_inputs': contrast_observations,
                 'action_horizon': n_action_steps,
                 'm_motion_in_C': other_config['m_motion_in_B']
+            })
+        elif algo == 'knn_topK_motion':
+            all_contrast_images = []
+            for i in range(len(observations[image_key])):
+                observations['video.single_image_0'] = observations[image_key][i]
+                # contrast_image = contrast_image_generator.generate(observations, observations['annotation.human.action.task_description'][0], is_inpaint=False)
+                contrast_image = contrast_image_generator.simple_generate(observations)
+                all_contrast_images.append(contrast_image)
+            all_contrast_images = np.stack(all_contrast_images)[:,None,:,:,:]
+
+            contrast_observations = {k:v for k, v in observations.items()}
+            contrast_observations[image_key] = all_contrast_images
+
+            #### for visualize
+            frames.append(tile_images([observations[image_key][0][0], contrast_observations[image_key][0][0]]))  
+            ####
+            actions, _ = policy.get_action(observations, options={
+                'algo': algo,
+                'n_candidates': other_config['n_candidates'],
+                'knn_k': other_config['knn_k'],
+                'contrast_inputs': contrast_observations,
+                'action_horizon': n_action_steps,
+                'top_k': other_config['top_k']
             })
         else:
             actions, _ = policy.get_action(observations, options={'algo': algo, 'action_horizon': n_action_steps})
@@ -540,7 +563,7 @@ def run_rollout_gymnasium_policy(
                 current_lengths[env_idx] = 0
 
                 ## reset visualize gif env_infos["final_info"][env_idx]["success"]
-                if args.algo in ['knn', 'pcd', 'knn_motion_in_B', 'knn_motion_setC_inA']:
+                if args.algo in ['knn', 'pcd', 'knn_motion_in_B', 'knn_motion_setC_inA', 'knn_topK_motion']:
                     success = env_infos["final_info"][env_idx]["success"][-1]
                     write_video(frames, f"{video_dir}/episode_{completed_episodes-1}_success_{success}.gif")
                     frames = []
@@ -703,7 +726,8 @@ if __name__ == "__main__":
             n_candidates=None,
             knn_k=None,
             long_ah=None,
-            m_motion_in_B=None
+            m_motion_in_B=None,
+            top_k=None
         )
         def parse_opts(opts):
             if len(opts) == 0:

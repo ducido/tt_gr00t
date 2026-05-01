@@ -73,6 +73,33 @@ def mask_with_bbox_zero(rbg_image, mask, pad=10):
 
     return masked_image
 
+def mask_center_bbox_zero(rgb_image):
+    """
+    Tạo bbox ở giữa ảnh với kích thước = 1/3 H, 1/3 W và set vùng đó = 0
+    """
+    masked_image = rgb_image.copy()
+    H, W = rgb_image.shape[:2]
+
+    # kích thước bbox = 1/3 ảnh
+    box_h = int(H * (2/3))
+    box_w = int(W * (2/3))
+
+    # center
+    center_y = H // 2
+    center_x = W // 2
+
+    # bbox
+    y_min = max(0, center_y - box_h // 2)
+    y_max = min(H - 1, center_y + box_h // 2)
+
+    x_min = max(0, center_x - box_w // 2)
+    x_max = min(W - 1, center_x + box_w // 2)
+
+    # zero vùng bbox
+    masked_image[y_min:y_max+1, x_min:x_max+1] = 0
+
+    return masked_image
+
 def mask_to_points(mask):
     if not mask.any():
         return None
@@ -172,6 +199,12 @@ class ContrastImageGenerator:
 
             image = masked_image
         return image
+
+    def simple_generate(self, obs):
+        rbg_image = self._get_rgb_image(obs)
+        masked_image = mask_center_bbox_zero(rbg_image)
+        return masked_image
+        
     
     def reset(self):
         self.task_description = None

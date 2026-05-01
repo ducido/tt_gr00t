@@ -369,6 +369,8 @@ class Gr00tPolicy(BasePolicy):
                 model_pred = self.model.knn_motion_in_B_get_action(**collated_inputs)
             elif collated_inputs['config']['algo'] == 'knn_motion_setC_inA':
                 model_pred = self.model.knn_motion_setC_inA_get_action(**collated_inputs)
+            elif collated_inputs['config']['algo'] == 'knn_topK_motion':
+                model_pred = self.model.knn_topK_motion_get_action(**collated_inputs)
             else:
                 model_pred = self.model.get_action(**collated_inputs)
         normalized_action = model_pred["action_pred"].float() # 1,50,128
