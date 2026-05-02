@@ -39,18 +39,18 @@ def tile_images(images):
 
     return tiled_image
 
-# def save_action_history(store_action, file_path):
-#     with open(file_path, "w") as f:
-#         for timestep in store_action:
-#             line_dict = {}
+def save_action_history(store_action, file_path):
+    with open(file_path, "w") as f:
+        for timestep in store_action:
+            line_dict = {}
             
-#             for k, v in timestep.items():
-#                 # v shape: (1, 1) hoặc (1, 1, 1)
-#                 val = float(v.squeeze().item())
+            for k, v in timestep.items():
+                # v shape: (1, 1) hoặc (1, 1, 1)
+                val = float(v.squeeze().item())
                 
-#                 line_dict[k] = np.array([val], dtype=np.float32)
+                line_dict[k] = np.array([val], dtype=np.float32)
             
-#             f.write(str(line_dict) + "\n")
+            f.write(str(line_dict) + "\n")
 
 @dataclass
 class VideoConfig:
@@ -336,9 +336,9 @@ def run_rollout_gymnasium_policy(
     episode_infos = defaultdict(list)
 
     #######
-    if algo in ['knn', 'pcd', 'image_prompt_state', 'knn_motion_in_B', 'knn_motion_setC_inA']:
+    if algo in ['knn', 'pcd', 'image_prompt_state', 'knn_motion_in_B', 'knn_motion_setC_inA', 'knn_topK_long_motion']:
         other_config['env'] = env
-        temp_config = {k:v for k, v in other_config.items() if k not in ['n_candidates', 'knn_k', 'long_ah', 'm_motion_in_B']}
+        temp_config = {k:v for k, v in other_config.items() if k not in ['n_candidates', 'knn_k', 'long_ah', 'm_motion_in_B', 'top_k']}
         contrast_image_generator = get_contrast_image_generator(temp_config)
         contrast_image_generator.reset()
 
@@ -351,15 +351,15 @@ def run_rollout_gymnasium_policy(
     frames = []
     store_action = []
 
-    KEY_ORDER = [
-        'state.x', 'state.y', 'state.z',
-        'state.roll', 'state.pitch', 'state.yaw',
-        'state.gripper'
-    ]
-    each_timestep = {}
-    for k in KEY_ORDER:
-        each_timestep[k.replace('state', 'action')] = observations[k]
-    store_action.append(each_timestep)
+    # KEY_ORDER = [
+    #     'state.x', 'state.y', 'state.z',
+    #     'state.roll', 'state.pitch', 'state.yaw',
+    #     'state.gripper'
+    # ]
+    # each_timestep = {}
+    # for k in KEY_ORDER:
+    #     each_timestep[k.replace('state', 'action')] = observations[k]
+    # store_action.append(each_timestep)
 
     pbar = tqdm(total=n_episodes, desc="Episodes")
     while completed_episodes < n_episodes:
@@ -470,17 +470,40 @@ def run_rollout_gymnasium_policy(
                 'action_horizon': n_action_steps,
                 'm_motion_in_C': other_config['m_motion_in_B']
             })
+        elif algo == 'knn_topK_long_motion':
+            all_contrast_images = []
+            for i in range(len(observations[image_key])):
+                observations['video.single_image_0'] = observations[image_key][i]
+                contrast_image = contrast_image_generator.generate(observations, observations['annotation.human.action.task_description'][0], is_inpaint=False)
+                all_contrast_images.append(contrast_image)
+            all_contrast_images = np.stack(all_contrast_images)[:,None,:,:,:]
+
+            contrast_observations = {k:v for k, v in observations.items()}
+            contrast_observations[image_key] = all_contrast_images
+
+            #### for visualize
+            frames.append(tile_images([observations[image_key][0][0], contrast_observations[image_key][0][0]]))  
+            ####
+            actions, _ = policy.get_action(observations, options={
+                'algo': algo,
+                'n_candidates': other_config['n_candidates'],
+                'knn_k': other_config['knn_k'],
+                'contrast_inputs': contrast_observations,
+                'action_horizon': n_action_steps,
+                'top_k': other_config['top_k'],
+                'long_ah': other_config['long_ah']
+            })
         else:
             actions, _ = policy.get_action(observations, options={'algo': algo, 'action_horizon': n_action_steps})
 
-            for n in range(n_action_steps):
-                each_timestep = {}
-                for k in actions:
-                    each_timestep[k] = actions[k][:,n:n+1]
-                store_action.append(each_timestep)
-            
+        for n in range(n_action_steps):
+            each_timestep = {}
             for k in actions:
-                actions[k] += np.random.randn(*actions[k].shape) * 0.01
+                each_timestep[k] = actions[k][:,n:n+1]
+            store_action.append(each_timestep)
+            
+            # for k in actions:
+            #     actions[k] += np.random.randn(*actions[k].shape) * 0.01
             
 
         # print(actions.keys()) # dict_keys(['action.x', 'action.y', 'action.z', 'action.roll', 'action.pitch', 'action.yaw', 'action.gripper'])
@@ -554,14 +577,15 @@ def run_rollout_gymnasium_policy(
                 current_rewards[env_idx] = 0
                 current_lengths[env_idx] = 0
 
-                # save_action_history(store_action, f"/projects/extern/kisski/kisski-spath/dir.project/VLA_Imit/Isaac-GR00T/action_history/{completed_episodes}.txt")
-                # store_action = []
+                save_action_history(store_action, f"/projects/extern/kisski/kisski-spath/dir.project/VLA_Imit/Isaac-GR00T/action_history/pcd/{completed_episodes}.txt")
+                store_action = []
                 ## reset visualize gif env_infos["final_info"][env_idx]["success"]
                 
 
                 if args.algo in ['knn', 'pcd', 'knn_motion_in_B', 'knn_motion_setC_inA']:
                     success = env_infos["final_info"][env_idx]["success"][-1]
-                    write_video(frames, f"{video_dir}/episode_{completed_episodes-1}_success_{success}.gif")
+                    if frames:
+                        write_video(frames, f"{video_dir}/episode_{completed_episodes-1}_success_{success}.gif")
                     frames = []
 
         observations = next_obs
@@ -722,7 +746,8 @@ if __name__ == "__main__":
             n_candidates=None,
             knn_k=None,
             long_ah=None,
-            m_motion_in_B=None
+            m_motion_in_B=None,
+            top_k=None
         )
         def parse_opts(opts):
             if len(opts) == 0:

@@ -640,9 +640,70 @@ class Gr00tN1d6(PreTrainedModel):
 
         all_best_actions = []
         for i in range(int(B)):
-            top_K_best_action, top_scores = cd_with_knn_topK(raw_action[i], contrast_action[i], knn_k, top_k)
+            top_K_best_action, top_scores, top_indices = cd_with_knn_topK(raw_action[i], contrast_action[i], knn_k, top_k)
             best_action, jerk_rms = jerk_smoothest_action(top_K_best_action)
             print(jerk_rms)
+            all_best_actions.append(best_action)
+        best_action = torch.cat(all_best_actions, dim=0)
+        raw_action_outputs['action_pred'] = best_action
+        return raw_action_outputs
+
+
+    def knn_topK_long_motion_get_action(self, inputs: dict, config: dict) -> BatchFeature:
+        """
+        Generate actions using the complete model.
+        """
+        # Prepare inputs for backbone and action head
+        knn_k = config['knn_k']
+        top_k = config['top_k']
+        long_ah = config['long_ah']
+        contrast_inputs = config['contrast_inputs']
+        n_candidates = config['n_candidates']
+
+        print(f"long_ah: {long_ah}, knn_k: {knn_k}, top_k: {top_k}, n_candidates: {n_candidates}")
+        
+        backbone_inputs, action_inputs = self.prepare_input(inputs)
+        contrast_backbone_inputs, contrast_action_inputs = self.prepare_input(contrast_inputs)
+
+        # Forward through backbone
+        backbone_outputs = self.backbone(backbone_inputs)
+        contrast_backbone_outputs = self.backbone(contrast_backbone_inputs)
+
+        # concat dim=0 backbone_outputs
+        for k in backbone_outputs.keys():
+            x = torch.cat(
+                [backbone_outputs[k], contrast_backbone_outputs[k]],
+                dim=0
+            )
+            backbone_outputs[k] = split_repeat_concat(x, n_candidates)
+
+        for k in action_inputs.keys():
+            if k != 'pixel_values':
+                x = torch.cat([action_inputs[k], contrast_action_inputs[k]], dim=0)
+                action_inputs[k] = split_repeat_concat(x, n_candidates)
+            else:
+                action_inputs[k] = action_inputs[k] + contrast_action_inputs[k]
+
+        action_outputs = self.action_head.get_action(backbone_outputs, action_inputs)
+
+        raw_action_outputs = {}
+        contrast_action_outputs = {}
+        for k in action_outputs.keys():
+            raw_action_outputs[k], contrast_action_outputs[k] = torch.chunk(action_outputs[k], 2, dim=0)
+
+        assert raw_action_outputs['action_pred'].shape[0] % n_candidates == 0
+        B = raw_action_outputs['action_pred'].shape[0] // n_candidates
+        raw = raw_action_outputs['action_pred'][:,:,:7]       # [24, 50, 128]
+        contrast = contrast_action_outputs['action_pred'][:,:,:7]
+        raw_action = raw.reshape(int(B), n_candidates, *raw.shape[1:])
+        contrast_action = contrast.reshape(int(B), n_candidates, *contrast.shape[1:])
+
+        all_best_actions = []
+        for i in range(int(B)):
+            top_K_best_action, top_scores, top_indices = cd_with_knn_topK(raw_action[i][:,:config['action_horizon']], contrast_action[i][:,:config['action_horizon']], knn_k, top_k)
+            long_best_raw_action = raw_action[i][top_indices][:,:long_ah]
+            best_action, jerk_rms = jerk_smoothest_action(long_best_raw_action)
+            best_action = best_action[:,:config['action_horizon']]
             all_best_actions.append(best_action)
         best_action = torch.cat(all_best_actions, dim=0)
         raw_action_outputs['action_pred'] = best_action
@@ -1037,7 +1098,7 @@ def cd_with_knn_topK(actions, contrast_actions, knn_k, top_k, eps=1e-8):
 
     top_actions = actions[top_indices]  # (top_k, T, D)
 
-    return top_actions, top_scores
+    return top_actions, top_scores, top_indices
 
 def cd_with_knn_setC(actions, contrast_actions_B, contrast_actions_C, knn_k, eps=1e-8):
     """

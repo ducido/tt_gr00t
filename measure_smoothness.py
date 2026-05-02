@@ -189,19 +189,5 @@ if __name__ == "__main__":
         print(f"ATV: {atv.item():.6f}")
         print(f"Jerk RMS: {jerk.item():.6f}")
 
-# python measure_smoothness.py --path action_history/local/chunk_3.txt --add_noise
-
-
-for loop in range(10):
-    action_chunk = model(obs) # (1,50,7)
-
-    action_chunk = action_chunk[:,:20] # our current motion set up use long_ah=20
-    action_chunk_noise = action_chunk + torch.randn_like(action_chunk) * 0.01
-
-    jerk_score = compute_jerk(action_chunk)
-    jerk_score_add_noise = compute_jerk(action_chunk_noise)
-
-    processed_action = post_processing(action_chunk)
-    new_obs = env.step(processed_action[:,:10]) # assume we only execute first 10 actions to env
-    obs = new_obs
+# python measure_smoothness.py --path action_history/ours/3.txt
 

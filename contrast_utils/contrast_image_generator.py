@@ -195,7 +195,7 @@ class ContrastImageGenerator:
             # masked_image = mask_with_bbox_noise(rbg_image, mask, pad=10)
             print("No inpainting, masking objects with bbox zero")
             rbg_image = self._get_rgb_image(obs)
-            masked_image = mask_with_bbox_zero(rbg_image, mask, pad=15)
+            masked_image = mask_with_bbox_zero(rbg_image, mask, pad=10)
 
             image = masked_image
         return image
