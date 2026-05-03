@@ -577,7 +577,7 @@ def run_rollout_gymnasium_policy(
                 current_rewards[env_idx] = 0
                 current_lengths[env_idx] = 0
 
-                save_action_history(store_action, f"/projects/extern/kisski/kisski-spath/dir.project/VLA_Imit/Isaac-GR00T/action_history/pcd/{completed_episodes}.txt")
+                save_action_history(store_action, f"/projects/extern/kisski/kisski-spath/dir.project/VLA_Imit/Isaac-GR00T/action_history/pcd_spoon/{completed_episodes}.txt")
                 store_action = []
                 ## reset visualize gif env_infos["final_info"][env_idx]["success"]
                 

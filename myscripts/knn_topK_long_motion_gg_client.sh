@@ -5,10 +5,10 @@ module load ffmpeg/7.0.2
 
 TASKS=(
   # simpler_env_google/google_robot_close_drawer
-  simpler_env_google/google_robot_move_near
+  # simpler_env_google/google_robot_move_near
   # simpler_env_google/google_robot_open_drawer
   # simpler_env_google/google_robot_pick_coke_can
-  # simpler_env_google/google_robot_place_in_closed_drawer
+  simpler_env_google/google_robot_place_in_closed_drawer
 )
 
 action_horizon=1
@@ -16,7 +16,7 @@ EPISODES=5
 N_envs=1
 PORT=$1
 
-knn=6
+knn=8
 n_candidates=12
 top_k=5
 long_ah=10

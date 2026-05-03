@@ -1,16 +1,17 @@
 
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=2
 
 TASKS=(
-  simpler_env_widowx/widowx_carrot_on_plate
-  simpler_env_widowx/widowx_put_eggplant_in_basket
+  # simpler_env_widowx/widowx_carrot_on_plate
+  # simpler_env_widowx/widowx_put_eggplant_in_basket
   simpler_env_widowx/widowx_spoon_on_towel
-  simpler_env_widowx/widowx_stack_cube
+  # simpler_env_widowx/widowx_stack_cube
 )
 
-action_horizon=10
-EPISODES=50
+action_horizon=4
+EPISODES=5
 N_envs=1
+PORT=$1
 
 n_candidates=24
 search_opts="by grounded_sam_tracking alpha 0.2 num_repeats 24 n_candidates $n_candidates"
@@ -27,17 +28,17 @@ for TASK in "${TASKS[@]}"; do
 
     echo "Running task: $TASK"
 
-    gr00t/eval/sim/SimplerEnv/simpler_uv/.venv/bin/python gr00t/eval/rollout_policy_add_pcd_add_negprompt.py \
+    gr00t/eval/sim/SimplerEnv/simpler_uv/.venv/bin/python gr00t/eval/rollout_policy.py \
         --algo "pcd" \
         --search_opts $search_opts \
         --n_episodes $EPISODES \
         --policy_client_host 127.0.0.1 \
-        --policy_client_port 5557 \
+        --policy_client_port $PORT \
         --max_episode_steps=300 \
         --env_name "$TASK" \
         --n_action_steps $action_horizon \
         --n_envs $N_envs \
-        --video_dir "$VIDEO_DIR"  \
+        --video_dir "$VIDEO_DIR" \
        > "$LOG_DIR/${NAME}.txt" 2>&1
 
     echo "Finished task: $TASK"

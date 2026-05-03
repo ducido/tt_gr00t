@@ -134,8 +134,8 @@ def calc_atv_only(path: str, args):
 
 def calc_jerk_only(path: str, args):
     actions = _load_trajectory(path) # 1,300,7
-    print(actions.shape)
-    actions = actions[:, :20]
+    # print(actions.shape)
+    # actions = actions[:, :20]
     if args.add_noise:
         actions += torch.randn_like(actions) * 0.01
     jerk_rms = my_calc_jerk_rms(actions)
@@ -189,5 +189,5 @@ if __name__ == "__main__":
         print(f"ATV: {atv.item():.6f}")
         print(f"Jerk RMS: {jerk.item():.6f}")
 
-# python measure_smoothness.py --path action_history/ours/3.txt
+# python measure_smoothness.py --path action_history/pcd_spoon/1.txt
 

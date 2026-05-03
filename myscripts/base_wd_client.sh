@@ -2,15 +2,15 @@
 export CUDA_VISIBLE_DEVICES=1
 
 TASKS=(
-  simpler_env_widowx/widowx_carrot_on_plate
+#   simpler_env_widowx/widowx_carrot_on_plate
   simpler_env_widowx/widowx_put_eggplant_in_basket
-  simpler_env_widowx/widowx_spoon_on_towel
-  simpler_env_widowx/widowx_stack_cube
+#   simpler_env_widowx/widowx_spoon_on_towel
+#   simpler_env_widowx/widowx_stack_cube
 )
 
 action_horizon=4
-EPISODES=200
-N_envs=5
+EPISODES=5
+N_envs=1
 PORT=$1
 
 for TASK in "${TASKS[@]}"; do

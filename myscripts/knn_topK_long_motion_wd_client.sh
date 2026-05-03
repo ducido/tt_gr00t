@@ -1,21 +1,21 @@
 
-export CUDA_VISIBLE_DEVICES=3
+export CUDA_VISIBLE_DEVICES=1
 module load gcc/13.2.0
 module load ffmpeg/7.0.2
 
 TASKS=(
-  simpler_env_widowx/widowx_carrot_on_plate
-  simpler_env_widowx/widowx_put_eggplant_in_basket
+  # simpler_env_widowx/widowx_carrot_on_plate
+  # simpler_env_widowx/widowx_put_eggplant_in_basket
   simpler_env_widowx/widowx_spoon_on_towel
-  simpler_env_widowx/widowx_stack_cube
+  # simpler_env_widowx/widowx_stack_cube
 )
 
 action_horizon=4
-EPISODES=50
+EPISODES=5
 N_envs=1
 PORT=$1
 
-knn=6
+knn=10
 n_candidates=12
 top_k=5
 long_ah=10
@@ -44,7 +44,7 @@ for TASK in "${TASKS[@]}"; do
         --n_action_steps $action_horizon \
         --n_envs $N_envs \
         --video_dir "$VIDEO_DIR" \
-       > "$LOG_DIR/${NAME}.txt" 2>&1
+        > "$LOG_DIR/${NAME}.txt" 2>&1
 
     echo "Finished task: $TASK"
     echo ""
