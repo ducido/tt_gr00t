@@ -221,6 +221,7 @@ def register_simpler_envs():
         "google_robot_open_drawer",
         "google_robot_close_drawer",
         "google_robot_place_in_closed_drawer",
+        "google_robot_place_apple_in_closed_top_drawer",
     ]:
         register(
             id=f"simpler_env_google/{env_name}",

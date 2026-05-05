@@ -35,6 +35,11 @@ uv pip install --editable "$PROJECT_REPO" --no-deps
 uv pip install omegaconf albumentations==0.5.2 webdataset scikit-image easydict scikit-learn pandas lightning kornia
 uv pip install -r third_party/inpaint_anything/lama/requirements.txt
 
+cd third_party/grounded_sam_2
+uv pip install -e .
+uv pip install --no-build-isolation -e grounding_dino
+cd ..
+
 # Stable headless timestep (optional but recommended)
 # python - <<'PY'
 # import importlib, re

@@ -1,18 +1,18 @@
 
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=2
 module load gcc/13.2.0
 module load ffmpeg/7.0.2
 
 TASKS=(
   # simpler_env_google/google_robot_close_drawer
-  simpler_env_google/google_robot_move_near
+  # simpler_env_google/google_robot_move_near
   # simpler_env_google/google_robot_open_drawer
   # simpler_env_google/google_robot_pick_coke_can
-  # simpler_env_google/google_robot_place_in_closed_drawer
+  simpler_env_google/google_robot_place_apple_in_closed_top_drawer
 )
 
 action_horizon=1
-EPISODES=5
+EPISODES=50
 N_envs=1
 
 n_candidates=24
@@ -30,7 +30,7 @@ for TASK in "${TASKS[@]}"; do
 
     echo "Running task: $TASK"
 
-    gr00t/eval/sim/SimplerEnv/simpler_uv/.venv/bin/python gr00t/eval/rollout_policy_store-action.py \
+    gr00t/eval/sim/SimplerEnv/simpler_uv/.venv/bin/python gr00t/eval/rollout_policy.py \
         --algo "pcd" \
         --search_opts $search_opts \
         --n_episodes $EPISODES \
@@ -40,8 +40,8 @@ for TASK in "${TASKS[@]}"; do
         --env_name "$TASK" \
         --n_action_steps $action_horizon \
         --n_envs $N_envs \
-        --video_dir "$VIDEO_DIR" # \
-       #> "$LOG_DIR/${NAME}.txt" 2>&1
+        --video_dir "$VIDEO_DIR"  \
+       > "$LOG_DIR/${NAME}.txt" 2>&1
 
     echo "Finished task: $TASK"
     echo ""

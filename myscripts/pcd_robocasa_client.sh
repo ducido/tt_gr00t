@@ -4,38 +4,31 @@ module load gcc/13.2.0
 module load ffmpeg/7.0.2
 
 TASKS=(
-  # simpler_env_google/google_robot_close_drawer
-  # simpler_env_google/google_robot_move_near
-  # simpler_env_google/google_robot_open_drawer
-  # simpler_env_google/google_robot_pick_coke_can
-  simpler_env_google/google_robot_place_apple_in_closed_top_drawer
+  robocasa_panda_omron/CoffeeSetupMug_PandaOmron_Env
 )
 
 action_horizon=1
-EPISODES=50
+EPISODES=5
 N_envs=1
 PORT=$1
 
-knn=10
-n_candidates=12
-top_k=5
-long_ah=5
-search_opts="by grounded_sam_tracking alpha 0.2 num_repeats 24 n_candidates $n_candidates knn_k $knn top_k $top_k long_ah $long_ah"
+n_candidates=24
+search_opts="by grounded_sam_tracking alpha 0.2 num_repeats 24 n_candidates $n_candidates"
 
 
 
 for TASK in "${TASKS[@]}"; do
     NAME=$(basename "$TASK")
 
-    LOG_DIR="eval_logs/gg_robot/knn_${knn}_topK_${top_k}_long_ah_${long_ah}_motion_ah_${action_horizon}_candidates_${n_candidates}_nenvs_${N_envs}/$NAME"
+    LOG_DIR="eval_logs/google_simpler_env/pcd_ah_${action_horizon}_candidates_${n_candidates}/$NAME"
     VIDEO_DIR="$LOG_DIR/videos"
     mkdir -p "$LOG_DIR"
     mkdir -p "$VIDEO_DIR"
 
     echo "Running task: $TASK"
 
-    gr00t/eval/sim/SimplerEnv/simpler_uv/.venv/bin/python gr00t/eval/rollout_policy.py \
-        --algo "knn_topK_long_motion" \
+    gr00t/eval/sim/robocasa/robocasa_uv/.venv/bin/python gr00t/eval/rollout_policy_dev_robocasa.py \
+        --algo "pcd" \
         --search_opts $search_opts \
         --n_episodes $EPISODES \
         --policy_client_host 127.0.0.1 \
@@ -44,7 +37,7 @@ for TASK in "${TASKS[@]}"; do
         --env_name "$TASK" \
         --n_action_steps $action_horizon \
         --n_envs $N_envs \
-        --video_dir "$VIDEO_DIR" #\
+        --video_dir "$VIDEO_DIR" # \
        #> "$LOG_DIR/${NAME}.txt" 2>&1
 
     echo "Finished task: $TASK"

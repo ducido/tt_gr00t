@@ -26,7 +26,7 @@ for TASK in "${TASKS[@]}"; do
 
     echo "Running task: $TASK"
 
-    gr00t/eval/sim/SimplerEnv/simpler_uv/.venv/bin/python gr00t/eval/rollout_policy_store-action.py \
+    gr00t/eval/sim/SimplerEnv/simpler_uv/.venv/bin/python gr00t/eval/rollout_policy.py \
         --n_episodes $EPISODES \
         --policy_client_host 127.0.0.1 \
         --policy_client_port $PORT \
@@ -34,8 +34,8 @@ for TASK in "${TASKS[@]}"; do
         --env_name "$TASK" \
         --n_action_steps $action_horizon \
         --n_envs $N_envs \
-        --video_dir "$VIDEO_DIR" # \
-        # > "$LOG_DIR/${NAME}.txt" 2>&1
+        --video_dir "$VIDEO_DIR" \
+        > "$LOG_DIR/${NAME}.txt" 2>&1
 
     echo "Finished task: $TASK"
     echo ""
